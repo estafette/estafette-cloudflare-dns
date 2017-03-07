@@ -123,10 +123,10 @@ func main() {
 							}
 
 							if kubeCloudflareProxy == "true" {
-								fmt.Printf("Enabling proxying for dns record %v (A)...\n", hostname, *service.Status.LoadBalancer.Ingress[0].Ip)
+								fmt.Printf("Enabling proxying for dns record %v (A)...\n", hostname)
 							}
 							if kubeCloudflareUseOriginRecord == "true" {
-								fmt.Printf("Using origin dns record for dns record %v (A)...\n", hostname, *service.Status.LoadBalancer.Ingress[0].Ip)
+								fmt.Printf("Using origin dns record for dns record %v (A)...\n", hostname)
 							}
 
 							//dnsRecordsMutations.With(prometheus.Labels{"action": "update", "namespace": *namespace.Metadata.Name}).Inc()
