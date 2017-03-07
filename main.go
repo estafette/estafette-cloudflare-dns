@@ -34,10 +34,12 @@ func init() {
 func main() {
 
 	// start prometheus
-	fmt.Println("Serving Prometheus metrics at :9101/metrics...")
-	flag.Parse()
-	http.Handle("/metrics", promhttp.Handler())
-	go log.Fatal(http.ListenAndServe(*addr, nil))
+	go func() {
+		fmt.Println("Serving Prometheus metrics at :9101/metrics...")
+		flag.Parse()
+		http.Handle("/metrics", promhttp.Handler())
+		log.Fatal(http.ListenAndServe(*addr, nil))
+	}()
 
 	// seed random number
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
