@@ -77,7 +77,7 @@ func main() {
 			}
 			fmt.Printf("Namespace %v has %v services\n", *namespace.Metadata.Name, len(services.Items))
 
-			// loop all namespaces
+			// loop all services
 			for _, service := range services.Items {
 
 				if &service != nil && &service.Metadata != nil && &service.Metadata.Annotations != nil {
