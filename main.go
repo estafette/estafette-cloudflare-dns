@@ -34,9 +34,10 @@ func init() {
 func main() {
 
 	// start prometheus
+	fmt.Println("Serving Prometheus metrics at :9101/metrics...")
 	flag.Parse()
 	http.Handle("/metrics", promhttp.Handler())
-	go http.ListenAndServe(*addr, nil)
+	go log.Fatal(http.ListenAndServe(*addr, nil))
 
 	// seed random number
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -97,8 +98,7 @@ func main() {
 
 										fmt.Printf("Service %v (namespace %v) has type LoadBalancer ip address %v...\n", *service.Metadata.Name, *namespace.Metadata.Name, *service.Status.LoadBalancer.Ingress[0].Ip)
 
-										dnsRecordsMutations.With(prometheus.Labels{"action": "update", "namespace": *namespace.Metadata.Name}).Inc()
-
+										//dnsRecordsMutations.With(prometheus.Labels{"action": "update", "namespace": *namespace.Metadata.Name}).Inc()
 									}
 								}
 							}
