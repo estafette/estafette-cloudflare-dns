@@ -2,15 +2,41 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"math/rand"
+	"net/http"
 	"time"
 
 	"github.com/ericchiang/k8s"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+var (
+	addr = flag.String("listen-address", ":9101", "The address to listen on for HTTP requests.")
+
+	dnsRecordsMutations = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "estafette_dns_record_mutations",
+			Help: "Number of dns records created or updated.",
+		},
+		[]string{"device"},
+	)
+)
+
+func init() {
+	// Metrics have to be registered to be exposed:
+	prometheus.MustRegister(dnsRecordsMutations)
+}
+
 func main() {
+
+	// start prometheus
+	flag.Parse()
+	http.Handle("/metrics", promhttp.Handler())
+	go http.ListenAndServe(*addr, nil)
 
 	// seed random number
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -71,10 +97,10 @@ func main() {
 
 										fmt.Printf("Service %v (namespace %v) has type LoadBalancer ip address %v...\n", *service.Metadata.Name, *namespace.Metadata.Name, *service.Status.LoadBalancer.Ingress[0].Ip)
 
+										dnsRecordsMutations.With(prometheus.Labels{"action": "update", "namespace": *namespace.Metadata.Name}).Inc()
+
 									}
-
 								}
-
 							}
 
 							// stop inspecting further annotations

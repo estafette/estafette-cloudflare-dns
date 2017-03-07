@@ -25,6 +25,9 @@ spec:
         app: ${APP_NAME}
         team: ${TEAM_NAME}
         version: ${VERSION}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9101"
     spec:
       containers:
       - name: ${APP_NAME}
@@ -37,3 +40,9 @@ spec:
           limits:
             cpu: ${CPU_LIMIT}
             memory: ${MEMORY_LIMIT}
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: 9101
+          initialDelaySeconds: 30
+          timeoutSeconds: 1

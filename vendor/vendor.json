@@ -3,6 +3,12 @@
 	"ignore": "test",
 	"package": [
 		{
+			"checksumSHA1": "wK6qecADq50EYOJIh+V7tD7T8Bk=",
+			"path": "github.com/beorn7/perks/quantile",
+			"revision": "4c0e84591b9aa9e6dcfdf3e020114cd81f89d5f9",
+			"revisionTime": "2016-08-04T10:47:26Z"
+		},
+		{
 			"checksumSHA1": "Lps/+JqMRVlrXgO/+cazYcfsglg=",
 			"path": "github.com/davecgh/go-spew/spew",
 			"revision": "346938d642f2ec3594ed81d874461961cd0faa76",
@@ -143,10 +149,64 @@
 			"revisionTime": "2017-03-07T00:15:33Z"
 		},
 		{
+			"checksumSHA1": "bQ9BML+wAZd81vdDAOC1U+yN8dU=",
+			"path": "github.com/matttproud/golang_protobuf_extensions/pbutil",
+			"revision": "c12348ce28de40eed0136aa2b644d0ee0650e56c",
+			"revisionTime": "2016-04-24T11:30:07Z"
+		},
+		{
 			"checksumSHA1": "R3yk3OJzuq4MVfVGX5AhkkYv1ko=",
 			"path": "github.com/pmezard/go-difflib/difflib",
 			"revision": "792786c7400a136282c1664665ae0a8db921c6c2",
 			"revisionTime": "2016-01-10T10:55:54Z"
+		},
+		{
+			"checksumSHA1": "gXM50n2jOuEerUovMaXLhQ2jBD0=",
+			"path": "github.com/prometheus/client_golang/prometheus",
+			"revision": "a5060f1eaab721946b185b2de468ff83ea5b89cb",
+			"revisionTime": "2017-03-07T14:33:02Z"
+		},
+		{
+			"checksumSHA1": "JBG6HwRfCUtfuxJKmfhsF/6gNp8=",
+			"path": "github.com/prometheus/client_golang/prometheus/promhttp",
+			"revision": "a5060f1eaab721946b185b2de468ff83ea5b89cb",
+			"revisionTime": "2017-03-07T14:33:02Z"
+		},
+		{
+			"checksumSHA1": "g9zAgPn3Y7+KmPOVsBTkCztn8nk=",
+			"path": "github.com/prometheus/client_model/go",
+			"revision": "6f3806018612930941127f2a7c6c453ba2c527d2",
+			"revisionTime": "2017-02-16T18:52:47Z"
+		},
+		{
+			"checksumSHA1": "6nyL1II2+OyscxsLvqhKd+WE16I=",
+			"path": "github.com/prometheus/common/expfmt",
+			"revision": "49fee292b27bfff7f354ee0f64e1bc4850462edf",
+			"revisionTime": "2017-02-20T10:38:46Z"
+		},
+		{
+			"checksumSHA1": "5ZLUh5QIuJSJZJvrdWajRGiqY1E=",
+			"path": "github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg",
+			"revision": "49fee292b27bfff7f354ee0f64e1bc4850462edf",
+			"revisionTime": "2017-02-20T10:38:46Z"
+		},
+		{
+			"checksumSHA1": "p/mG4sr75UblXOj9bxBwOTbe8LQ=",
+			"path": "github.com/prometheus/common/model",
+			"revision": "49fee292b27bfff7f354ee0f64e1bc4850462edf",
+			"revisionTime": "2017-02-20T10:38:46Z"
+		},
+		{
+			"checksumSHA1": "Us5mVXwiKZ+0a583F/p2ei/KsSA=",
+			"path": "github.com/prometheus/procfs",
+			"revision": "a1dba9ce8baed984a2495b658c82687f8157b98f",
+			"revisionTime": "2017-02-16T22:32:56Z"
+		},
+		{
+			"checksumSHA1": "EEhKWMs7onPwzJkmu1fmynVBk4Q=",
+			"path": "github.com/prometheus/procfs/xfs",
+			"revision": "a1dba9ce8baed984a2495b658c82687f8157b98f",
+			"revisionTime": "2017-02-16T22:32:56Z"
 		},
 		{
 			"checksumSHA1": "ofNmmhhJAxYL1Mh09iq+utdfHIM=",
@@ -209,5 +269,5 @@
 			"revisionTime": "2017-03-03T20:43:35Z"
 		}
 	],
-	"rootPath": "bitbucket.org/estafette-cloudflare-dns"
+	"rootPath": "bitbucket.org/xivart/estafette-cloudflare-dns"
 }
