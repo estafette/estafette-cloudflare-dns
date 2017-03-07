@@ -91,11 +91,15 @@ func main() {
 						if kubeCloudflareHostnames, ok := service.Metadata.Annotations["travix.io/kube-cloudflare-hostnames"]; ok && len(kubeCloudflareHostnames) > 0 {
 
 							// get other annotations or set their default
-							kubeCloudflareProxy := "true"
-							kubeCloudflareProxy, _ = service.Metadata.Annotations["travix.io/kube-cloudflare-proxy"]
+							kubeCloudflareProxy, ok := service.Metadata.Annotations["travix.io/kube-cloudflare-proxy"]
+							if !ok {
+								kubeCloudflareProxy = "true"
+							}
 
-							kubeCloudflareUseOriginRecord := "false"
-							kubeCloudflareUseOriginRecord, _ = service.Metadata.Annotations["kube-cloudflare-use-origin-record:"]
+							kubeCloudflareUseOriginRecord, ok := service.Metadata.Annotations["kube-cloudflare-use-origin-record:"]
+							if !ok {
+								kubeCloudflareUseOriginRecord = "false"
+							}
 
 							// check if type equals LoadBalancer
 							if *service.Spec.Type == "LoadBalancer" {
