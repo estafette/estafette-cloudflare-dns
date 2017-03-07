@@ -1,6 +1,6 @@
 FROM scratch
 
 COPY ca-certificates.crt /etc/ssl/certs/
-COPY main /
+COPY estafette-cloudflare-dns /
 
-CMD ["/main"]
+CMD ["/estafette-cloudflare-dns"]
