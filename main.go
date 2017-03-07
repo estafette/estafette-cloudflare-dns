@@ -84,60 +84,52 @@ func main() {
 
 					fmt.Printf("Checking service %v (namespace %v) for travix.io/kube-cloudflare-dns annotation...\n", *service.Metadata.Name, *namespace.Metadata.Name)
 
-					// check if service has travix.io/kube-cloudflare-dns annotation and it's value is true
-					if kubeCloudflareDNS, ok := service.Metadata.Annotations["travix.io/kube-cloudflare-dns"]; ok && kubeCloudflareDNS == "true" {
+					// get annotations or set default value
+					kubeCloudflareDNS, ok := service.Metadata.Annotations["travix.io/kube-cloudflare-dns"]
+					if !ok {
+						kubeCloudflareDNS = "false"
+					}
 
-						// check if service has travix.io/kube-cloudflare-hostnames annotation and it's value is not empty
-						if kubeCloudflareHostnames, ok := service.Metadata.Annotations["travix.io/kube-cloudflare-hostnames"]; ok && len(kubeCloudflareHostnames) > 0 {
+					kubeCloudflareHostnames, ok := service.Metadata.Annotations["travix.io/kube-cloudflare-hostnames"]
+					if !ok {
+						kubeCloudflareHostnames = ""
+					}
 
-							// get other annotations or set their default
-							kubeCloudflareProxy, ok := service.Metadata.Annotations["travix.io/kube-cloudflare-proxy"]
-							if !ok {
-								kubeCloudflareProxy = "true"
+					kubeCloudflareProxy, ok := service.Metadata.Annotations["travix.io/kube-cloudflare-proxy"]
+					if !ok {
+						kubeCloudflareProxy = "true"
+					}
+
+					kubeCloudflareUseOriginRecord, ok := service.Metadata.Annotations["kube-cloudflare-use-origin-record:"]
+					if !ok {
+						kubeCloudflareUseOriginRecord = "false"
+					}
+
+					// check if service has travix.io/kube-cloudflare-dns annotation and it's value is true and
+					// check if service has travix.io/kube-cloudflare-hostnames annotation and it's value is not empty and
+					// check if type equals LoadBalancer and
+					// check if LoadBalancer has an ip address
+					if kubeCloudflareDNS == "true" && len(kubeCloudflareHostnames) > 0 && *service.Spec.Type == "LoadBalancer" && len(service.Status.LoadBalancer.Ingress) > 0 {
+
+						// loop all hostnames
+						hostnames := strings.Split(kubeCloudflareHostnames, ",")
+						for _, hostname := range hostnames {
+
+							fmt.Printf("Updating dns record %v (A) to ip address %v...\n", hostname, *service.Status.LoadBalancer.Ingress[0].Ip)
+
+							_, err := cf.UpsertDNSRecord("A", hostname, *service.Status.LoadBalancer.Ingress[0].Ip)
+							if err != nil {
+								log.Fatal(err)
 							}
 
-							kubeCloudflareUseOriginRecord, ok := service.Metadata.Annotations["kube-cloudflare-use-origin-record:"]
-							if !ok {
-								kubeCloudflareUseOriginRecord = "false"
+							if kubeCloudflareProxy == "true" {
+								fmt.Printf("Enabling proxying for dns record %v (A)...\n", hostname, *service.Status.LoadBalancer.Ingress[0].Ip)
+							}
+							if kubeCloudflareUseOriginRecord == "true" {
+								fmt.Printf("Using origin dns record for dns record %v (A)...\n", hostname, *service.Status.LoadBalancer.Ingress[0].Ip)
 							}
 
-							// check if type equals LoadBalancer
-							if *service.Spec.Type == "LoadBalancer" {
-
-								fmt.Printf("Service %v (namespace %v) has type LoadBalancer...\n", *service.Metadata.Name, *namespace.Metadata.Name)
-
-								// check if LoadBalancer has an ip address
-								if len(service.Status.LoadBalancer.Ingress) > 0 {
-
-									fmt.Printf("Service %v (namespace %v) has type LoadBalancer ip address %v...\n", *service.Metadata.Name, *namespace.Metadata.Name, *service.Status.LoadBalancer.Ingress[0].Ip)
-
-									//dnsRecordsMutations.With(prometheus.Labels{"action": "update", "namespace": *namespace.Metadata.Name}).Inc()
-
-									// 18:44:52.678     travix.io/kube-cloudflare-dns: "true"
-									// 18:44:52.678     travix.io/kube-cloudflare-proxy: "true"
-									// 18:44:52.679     travix.io/kube-cloudflare-use-origin-record: "false"
-									// 18:44:52.679     travix.io/kube-cloudflare-hostnames: "grafana-tooling.travix.com"
-
-									// loop all hostnames
-									hostnames := strings.Split(kubeCloudflareHostnames, ",")
-									for _, hostname := range hostnames {
-
-										fmt.Printf("Updating dns record %v (A) to ip address %v...\n", hostname, *service.Status.LoadBalancer.Ingress[0].Ip)
-
-										_, err := cf.UpsertDNSRecord("A", hostname, *service.Status.LoadBalancer.Ingress[0].Ip)
-										if err != nil {
-											log.Fatal(err)
-										}
-
-										if kubeCloudflareProxy == "true" {
-											fmt.Printf("Enabling proxying for dns record %v (A)...\n", hostname, *service.Status.LoadBalancer.Ingress[0].Ip)
-										}
-										if kubeCloudflareUseOriginRecord == "true" {
-											fmt.Printf("Using origin dns record for dns record %v (A)...\n", hostname, *service.Status.LoadBalancer.Ingress[0].Ip)
-										}
-									}
-								}
-							}
+							//dnsRecordsMutations.With(prometheus.Labels{"action": "update", "namespace": *namespace.Metadata.Name}).Inc()
 						}
 					}
 				}
