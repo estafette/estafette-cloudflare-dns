@@ -183,22 +183,23 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service) 
 			updateService := false
 			serviceIPAddress := *service.Status.LoadBalancer.Ingress[0].Ip
 
-			// kubeCloudflareOriginRecordZone
+			// if use origin is enabled, create an A record for the origin
+			if kubeCloudflareUseOriginRecord == "true" && kubeCloudflareOriginRecordHostname != "" {
+				if kubeCloudflareUseOriginRecord != kubeCloudflareState.UseOriginRecord || kubeCloudflareState.OriginRecordHostname != kubeCloudflareOriginRecordHostname {
 
-			if kubeCloudflareUseOriginRecord != kubeCloudflareState.UseOriginRecord && kubeCloudflareUseOriginRecord == "true" && kubeCloudflareOriginRecordHostname != "" {
-				fmt.Printf("Updating origin dns record %v (A) to ip address %v...\n", kubeCloudflareOriginRecordHostname, serviceIPAddress)
+					fmt.Printf("Updating origin dns record %v (A) to ip address %v...\n", kubeCloudflareOriginRecordHostname, serviceIPAddress)
 
-				_, err := cf.UpsertDNSRecord("A", kubeCloudflareOriginRecordHostname, serviceIPAddress)
-				if err != nil {
-					log.Println(err)
-					return err
+					_, err := cf.UpsertDNSRecord("A", kubeCloudflareOriginRecordHostname, serviceIPAddress)
+					if err != nil {
+						log.Println(err)
+						return err
+					}
+
+					// set state annotation
+					updateService = true
+				} else {
+					fmt.Printf("Skip updating origin dns record %v because state hasn't changed...\n", kubeCloudflareOriginRecordHostname)
 				}
-
-				// set state annotation
-				kubeCloudflareState.UseOriginRecord = kubeCloudflareUseOriginRecord
-				updateService = true
-			} else {
-				fmt.Printf("Skip updating origin dns record %v because state hasn't changed...\n", kubeCloudflareOriginRecordHostname)
 			}
 
 			// loop all hostnames
@@ -208,7 +209,7 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service) 
 				// update dns record if it's new or has changed or there are new hosts
 				if serviceIPAddress != kubeCloudflareState.IPAddress || kubeCloudflareHostnames != kubeCloudflareState.Hostnames || kubeCloudflareUseOriginRecord != kubeCloudflareState.UseOriginRecord {
 
-					if kubeCloudflareUseOriginRecord != kubeCloudflareState.UseOriginRecord && kubeCloudflareUseOriginRecord == "true" && kubeCloudflareOriginRecordHostname != "" {
+					if kubeCloudflareUseOriginRecord == "true" && kubeCloudflareOriginRecordHostname != "" && (kubeCloudflareUseOriginRecord != kubeCloudflareState.UseOriginRecord || kubeCloudflareState.OriginRecordHostname != kubeCloudflareOriginRecordHostname) {
 
 						fmt.Printf("Updating dns record %v (CNAME) to value %v...\n", hostname, kubeCloudflareOriginRecordHostname)
 
@@ -231,8 +232,6 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service) 
 					}
 
 					// set state annotation
-					kubeCloudflareState.IPAddress = serviceIPAddress
-					kubeCloudflareState.Hostnames = kubeCloudflareHostnames
 					updateService = true
 				} else {
 					fmt.Printf("Skip updating dns record %v (A) because state hasn't changed...\n", hostname)
@@ -252,7 +251,6 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service) 
 					}
 
 					// set state annotation
-					kubeCloudflareState.Proxy = kubeCloudflareProxy
 					updateService = true
 				} else {
 					fmt.Printf("Skip updating dns record %v proxied setting because state hasn't changed...\n", hostname)
@@ -262,6 +260,13 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service) 
 			}
 
 			if updateService {
+
+				// if any state property changed make sure to update all
+				kubeCloudflareState.Proxy = kubeCloudflareProxy
+				kubeCloudflareState.IPAddress = serviceIPAddress
+				kubeCloudflareState.Hostnames = kubeCloudflareHostnames
+				kubeCloudflareState.UseOriginRecord = kubeCloudflareUseOriginRecord
+				kubeCloudflareState.OriginRecordHostname = kubeCloudflareOriginRecordHostname
 
 				fmt.Printf("Updating service %v (namespace %v) because state has changed...\n", *service.Metadata.Name, *service.Metadata.Namespace)
 
