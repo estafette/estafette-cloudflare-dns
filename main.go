@@ -85,26 +85,34 @@ func main() {
 
 	// watch services for all namespaces
 	go func() {
-		fmt.Println("Watching services for all namespaces...")
-		watcher, err := client.CoreV1().WatchServices(context.Background(), k8s.AllNamespaces)
-		if err != nil {
-			log.Println(err)
-		}
-
 		// loop indefinitely
 		for {
-			event, service, err := watcher.Next()
+			fmt.Println("Watching services for all namespaces...")
+			watcher, err := client.CoreV1().WatchServices(context.Background(), k8s.AllNamespaces)
 			if err != nil {
 				log.Println(err)
-				continue
+			} else {
+				// loop indefinitely, unless it errors
+				for {
+					event, service, err := watcher.Next()
+					if err != nil {
+						log.Println(err)
+						break
+					}
+
+					if *event.Type == k8s.EventAdded || *event.Type == k8s.EventModified {
+						fmt.Printf("Service %v (namespace %v) has event of type %v, processing it...\n", *service.Metadata.Name, *service.Metadata.Namespace, *event.Type)
+						processService(cf, client, service)
+					} else {
+						fmt.Printf("Service %v (namespace %v) has event of type %v, skipping it...\n", *service.Metadata.Name, *service.Metadata.Namespace, *event.Type)
+					}
+				}
 			}
 
-			if *event.Type == k8s.EventAdded || *event.Type == k8s.EventModified {
-				fmt.Printf("Service %v (namespace %v) has event of type %v, processing it...\n", *service.Metadata.Name, *service.Metadata.Namespace, *event.Type)
-				processService(cf, client, service)
-			} else {
-				fmt.Printf("Service %v (namespace %v) has event of type %v, skipping it...\n", *service.Metadata.Name, *service.Metadata.Namespace, *event.Type)
-			}
+			// sleep random time between 22 and 37 seconds
+			sleepTime := applyJitter(30)
+			fmt.Printf("Sleeping for %v seconds...\n", sleepTime)
+			time.Sleep(time.Duration(sleepTime) * time.Second)
 		}
 	}()
 
@@ -130,7 +138,7 @@ func main() {
 			}
 		}
 
-		// sleep random time between 20 and 40 seconds
+		// sleep random time between 225 and 375 seconds
 		sleepTime := applyJitter(300)
 		fmt.Printf("Sleeping for %v seconds...\n", sleepTime)
 		time.Sleep(time.Duration(sleepTime) * time.Second)
