@@ -2218,3 +2218,432 @@ func TestUpsertDNSRecord(t *testing.T) {
 	})
 
 }
+
+func TestUpdateProxySetting(t *testing.T) {
+
+	t.Run("ReturnsErrorIfZoneDoesNotExist", func(t *testing.T) {
+
+		dnsRecordName := "example.com"
+		proxy := "true"
+		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
+
+		fakeRESTClient := new(fakeRESTClient)
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=example.com", authentication).Return([]byte(`
+			{
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": [
+				],
+				"result_info": {
+					"page": 1,
+					"per_page": 20,
+					"count": 0,
+					"total_count": 0
+				}
+			}
+		`), nil)
+
+		apiClient := New(authentication)
+		apiClient.restClient = fakeRESTClient
+
+		// act
+		_, err := apiClient.UpdateProxySetting(dnsRecordName, proxy)
+
+		assert.NotNil(t, err)
+	})
+
+	t.Run("ReturnsErrorIfDnsRecordDoesNotExist", func(t *testing.T) {
+
+		dnsRecordName := "www.example.com"
+		proxy := "true"
+
+		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
+
+		fakeRESTClient := new(fakeRESTClient)
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=example.com", authentication).Return([]byte(`
+		{
+			"success": true,
+			"errors": [],
+			"messages": [],
+			"result": [
+			{
+				"id": "023e105f4ecef8ad9ca31a8372d0c353",
+				"name": "example.com",
+				"development_mode": 7200,
+				"original_name_servers": [
+				"ns1.originaldnshost.com",
+				"ns2.originaldnshost.com"
+				],
+				"original_registrar": "GoDaddy",
+				"original_dnshost": "NameCheap",
+				"created_on": "2014-01-01T05:20:00.12345Z",
+				"modified_on": "2014-01-01T05:20:00.12345Z",
+				"name_servers": [
+				"tony.ns.cloudflare.com",
+				"woz.ns.cloudflare.com"
+				],
+				"owner": {
+				"id": "7c5dae5552338874e5053f2534d2767a",
+				"email": "user@example.com",
+				"owner_type": "user"
+				},
+				"permissions": [
+				"#zone:read",
+				"#zone:edit"
+				],
+				"plan": {
+				"id": "e592fd9519420ba7405e1307bff33214",
+				"name": "Pro Plan",
+				"price": 20,
+				"currency": "USD",
+				"frequency": "monthly",
+				"legacy_id": "pro",
+				"is_subscribed": true,
+				"can_subscribe": true
+				},
+				"plan_pending": {
+				"id": "e592fd9519420ba7405e1307bff33214",
+				"name": "Pro Plan",
+				"price": 20,
+				"currency": "USD",
+				"frequency": "monthly",
+				"legacy_id": "pro",
+				"is_subscribed": true,
+				"can_subscribe": true
+				},
+				"status": "active",
+				"paused": false,
+				"type": "full",
+				"checked_on": "2014-01-01T05:20:00.12345Z"
+			}
+			],
+			"result_info": {
+			"page": 1,
+			"per_page": 20,
+			"count": 1,
+			"total_count": 1
+			}
+		}
+		`), nil)
+
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/023e105f4ecef8ad9ca31a8372d0c353/dns_records/?name=www.example.com", authentication).Return([]byte(`
+			{
+			"success": true,
+			"errors": [],
+			"messages": [],
+			"result": [],
+			"result_info": {
+				"page": 1,
+				"per_page": 20,
+				"count": 0,
+				"total_count": 0
+			}
+			}
+		`), nil)
+
+		apiClient := New(authentication)
+		apiClient.restClient = fakeRESTClient
+
+		// act
+		_, err := apiClient.UpdateProxySetting(dnsRecordName, proxy)
+
+		assert.NotNil(t, err)
+	})
+
+	t.Run("ReturnsErrorIfUpdateFailed", func(t *testing.T) {
+
+		dnsRecordName := "www.example.com"
+		proxy := "true"
+		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
+
+		fakeRESTClient := new(fakeRESTClient)
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=example.com", authentication).Return([]byte(`
+		{
+		"success": true,
+		"errors": [],
+		"messages": [],
+		"result": [
+			{
+			"id": "023e105f4ecef8ad9ca31a8372d0c353",
+			"name": "example.com",
+			"development_mode": 7200,
+			"original_name_servers": [
+				"ns1.originaldnshost.com",
+				"ns2.originaldnshost.com"
+			],
+			"original_registrar": "GoDaddy",
+			"original_dnshost": "NameCheap",
+			"created_on": "2014-01-01T05:20:00.12345Z",
+			"modified_on": "2014-01-01T05:20:00.12345Z",
+			"name_servers": [
+				"tony.ns.cloudflare.com",
+				"woz.ns.cloudflare.com"
+			],
+			"owner": {
+				"id": "7c5dae5552338874e5053f2534d2767a",
+				"email": "user@example.com",
+				"owner_type": "user"
+			},
+			"permissions": [
+				"#zone:read",
+				"#zone:edit"
+			],
+			"plan": {
+				"id": "e592fd9519420ba7405e1307bff33214",
+				"name": "Pro Plan",
+				"price": 20,
+				"currency": "USD",
+				"frequency": "monthly",
+				"legacy_id": "pro",
+				"is_subscribed": true,
+				"can_subscribe": true
+			},
+			"plan_pending": {
+				"id": "e592fd9519420ba7405e1307bff33214",
+				"name": "Pro Plan",
+				"price": 20,
+				"currency": "USD",
+				"frequency": "monthly",
+				"legacy_id": "pro",
+				"is_subscribed": true,
+				"can_subscribe": true
+			},
+			"status": "active",
+			"paused": false,
+			"type": "full",
+			"checked_on": "2014-01-01T05:20:00.12345Z"
+			}
+		],
+		"result_info": {
+			"page": 1,
+			"per_page": 20,
+			"count": 1,
+			"total_count": 1
+		}
+		}
+		`), nil)
+
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/023e105f4ecef8ad9ca31a8372d0c353/dns_records/?name=www.example.com", authentication).Return([]byte(`
+		{
+			"success": true,
+			"errors": [],
+			"messages": [],
+			"result": [
+			{
+			"id": "372e67954025e0ba6aaa6d586b9e0b59",
+			"type": "A",
+			"name": "www.example.com",
+			"content": "1.2.3.4",
+			"proxiable": true,
+			"proxied": false,
+			"ttl": 120,
+			"locked": false,
+			"zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+			"zone_name": "example.com",
+			"created_on": "2014-01-01T05:20:00.12345Z",
+			"modified_on": "2014-01-01T05:20:00.12345Z",
+			"data": {}
+			}
+			],
+			"result_info": {
+			"page": 1,
+			"per_page": 20,
+			"count": 1,
+			"total_count": 1
+			}
+		}
+		`), nil)
+
+		createdOn, err := time.Parse("2006-01-02T15:04:05.00000Z", "2014-01-01T05:20:00.12345Z")
+		modifiedOn, err := time.Parse("2006-01-02T15:04:05.00000Z", "2014-01-01T05:20:00.12345Z")
+
+		updatedDNSRecord := DNSRecord{
+			ID:         "372e67954025e0ba6aaa6d586b9e0b59",
+			Type:       "A",
+			Name:       dnsRecordName,
+			Content:    "1.2.3.4",
+			Proxiable:  true,
+			Proxied:    true,
+			TTL:        120,
+			Locked:     false,
+			ZoneID:     "023e105f4ecef8ad9ca31a8372d0c353",
+			ZoneName:   "example.com",
+			CreatedOn:  createdOn,
+			ModifiedOn: modifiedOn,
+			Data:       map[string]interface{}{},
+		}
+
+		fakeRESTClient.On("Put", "https://api.cloudflare.com/client/v4/zones/023e105f4ecef8ad9ca31a8372d0c353/dns_records/372e67954025e0ba6aaa6d586b9e0b59", updatedDNSRecord, authentication).Return([]byte(`
+		{
+			"success": false,
+			"errors": [],
+			"messages": [],
+			"result": {}
+		`), nil)
+
+		apiClient := New(authentication)
+		apiClient.restClient = fakeRESTClient
+
+		// act
+		_, err = apiClient.UpdateProxySetting(dnsRecordName, proxy)
+
+		assert.NotNil(t, err)
+	})
+
+	t.Run("ReturnsUpdatedDnsRecordIfUpdateSucceeded", func(t *testing.T) {
+
+		dnsRecordName := "www.example.com"
+		proxy := "true"
+		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
+
+		fakeRESTClient := new(fakeRESTClient)
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=example.com", authentication).Return([]byte(`
+		{
+		"success": true,
+		"errors": [],
+		"messages": [],
+		"result": [
+			{
+			"id": "023e105f4ecef8ad9ca31a8372d0c353",
+			"name": "example.com",
+			"development_mode": 7200,
+			"original_name_servers": [
+				"ns1.originaldnshost.com",
+				"ns2.originaldnshost.com"
+			],
+			"original_registrar": "GoDaddy",
+			"original_dnshost": "NameCheap",
+			"created_on": "2014-01-01T05:20:00.12345Z",
+			"modified_on": "2014-01-01T05:20:00.12345Z",
+			"name_servers": [
+				"tony.ns.cloudflare.com",
+				"woz.ns.cloudflare.com"
+			],
+			"owner": {
+				"id": "7c5dae5552338874e5053f2534d2767a",
+				"email": "user@example.com",
+				"owner_type": "user"
+			},
+			"permissions": [
+				"#zone:read",
+				"#zone:edit"
+			],
+			"plan": {
+				"id": "e592fd9519420ba7405e1307bff33214",
+				"name": "Pro Plan",
+				"price": 20,
+				"currency": "USD",
+				"frequency": "monthly",
+				"legacy_id": "pro",
+				"is_subscribed": true,
+				"can_subscribe": true
+			},
+			"plan_pending": {
+				"id": "e592fd9519420ba7405e1307bff33214",
+				"name": "Pro Plan",
+				"price": 20,
+				"currency": "USD",
+				"frequency": "monthly",
+				"legacy_id": "pro",
+				"is_subscribed": true,
+				"can_subscribe": true
+			},
+			"status": "active",
+			"paused": false,
+			"type": "full",
+			"checked_on": "2014-01-01T05:20:00.12345Z"
+			}
+		],
+		"result_info": {
+			"page": 1,
+			"per_page": 20,
+			"count": 1,
+			"total_count": 1
+		}
+		}
+		`), nil)
+
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/023e105f4ecef8ad9ca31a8372d0c353/dns_records/?name=www.example.com", authentication).Return([]byte(`
+		{
+			"success": true,
+			"errors": [],
+			"messages": [],
+			"result": [
+			{
+			"id": "372e67954025e0ba6aaa6d586b9e0b59",
+			"type": "A",
+			"name": "www.example.com",
+			"content": "1.2.3.4",
+			"proxiable": true,
+			"proxied": false,
+			"ttl": 120,
+			"locked": false,
+			"zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+			"zone_name": "example.com",
+			"created_on": "2014-01-01T05:20:00.12345Z",
+			"modified_on": "2014-01-01T05:20:00.12345Z",
+			"data": {}
+			}
+			],
+			"result_info": {
+			"page": 1,
+			"per_page": 20,
+			"count": 1,
+			"total_count": 1
+			}
+		}
+		`), nil)
+
+		createdOn, err := time.Parse("2006-01-02T15:04:05.00000Z", "2014-01-01T05:20:00.12345Z")
+		modifiedOn, err := time.Parse("2006-01-02T15:04:05.00000Z", "2014-01-01T05:20:00.12345Z")
+
+		updatedDNSRecord := DNSRecord{
+			ID:         "372e67954025e0ba6aaa6d586b9e0b59",
+			Type:       "A",
+			Name:       dnsRecordName,
+			Content:    "1.2.3.4",
+			Proxiable:  true,
+			Proxied:    true,
+			TTL:        120,
+			Locked:     false,
+			ZoneID:     "023e105f4ecef8ad9ca31a8372d0c353",
+			ZoneName:   "example.com",
+			CreatedOn:  createdOn,
+			ModifiedOn: modifiedOn,
+			Data:       map[string]interface{}{},
+		}
+
+		fakeRESTClient.On("Put", "https://api.cloudflare.com/client/v4/zones/023e105f4ecef8ad9ca31a8372d0c353/dns_records/372e67954025e0ba6aaa6d586b9e0b59", updatedDNSRecord, authentication).Return([]byte(`
+		{
+			"success": true,
+			"errors": [],
+			"messages": [],
+			"result": {
+			"id": "372e67954025e0ba6aaa6d586b9e0b59",
+			"type": "A",
+			"name": "www.example.com",
+			"content": "1.2.3.4",
+			"proxiable": true,
+			"proxied": true,
+			"ttl": 120,
+			"locked": false,
+			"zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+			"zone_name": "example.com",
+			"created_on": "2014-01-01T05:20:00.12345Z",
+			"modified_on": "2016-01-01T05:20:00.12345Z",
+			"data": {}
+			}
+		}
+		`), nil)
+
+		apiClient := New(authentication)
+		apiClient.restClient = fakeRESTClient
+
+		// act
+		returnedDNSRecord, err := apiClient.UpdateProxySetting(dnsRecordName, proxy)
+
+		assert.Nil(t, err)
+		assert.Equal(t, true, returnedDNSRecord.Proxied)
+	})
+}

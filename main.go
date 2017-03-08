@@ -175,6 +175,12 @@ func main() {
 											fmt.Printf("Disabling proxying for dns record %v (A)...\n", hostname)
 										}
 
+										_, err := cf.UpdateProxySetting(hostname, kubeCloudflareProxy)
+										if err != nil {
+											log.Println(err)
+											continue
+										}
+
 										// set state annotation
 										kubeCloudflareState.Proxy = kubeCloudflareProxy
 										updateService = true

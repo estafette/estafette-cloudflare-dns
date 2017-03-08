@@ -296,7 +296,7 @@ func (cf *Cloudflare) updateDNSRecordByZone(zone Zone, dnsRecordType, dnsRecordN
 	return
 }
 
-// UpdateDNSRecord either updates or creates a dns record.
+// UpdateDNSRecord updates an existing dns record.
 func (cf *Cloudflare) UpdateDNSRecord(dnsRecordType, dnsRecordName, dnsRecordContent string) (r DNSRecord, err error) {
 
 	// get zone
@@ -350,6 +350,61 @@ func (cf *Cloudflare) UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordCon
 	}
 
 	r = cloudflareDNSRecordsCreateResult.DNSRecord
+
+	return
+}
+
+// UpdateProxySetting updates the proxied setting for an existing dns record.
+func (cf *Cloudflare) UpdateProxySetting(dnsRecordName, proxy string) (r DNSRecord, err error) {
+
+	// get zone
+	zone, err := cf.GetZoneByDNSName(dnsRecordName)
+	if err != nil {
+		return
+	}
+
+	// get dns record
+	dnsRecordsResult, err := cf.getDNSRecordsByZoneAndName(zone, dnsRecordName)
+	if err != nil {
+		return
+	}
+
+	if dnsRecordsResult.ResultInfo.Count == 0 {
+		err = errors.New("No matching dns record has been found")
+		return
+	} else if dnsRecordsResult.ResultInfo.Count > 1 {
+		err = errors.New("Cannot update proxy setting, there's more than 1 record by that name")
+		return
+	} else if dnsRecordsResult.ResultInfo.Count == 1 {
+
+		r = dnsRecordsResult.DNSRecords[0]
+
+		if r.Proxiable {
+
+			if proxy == "true" {
+				r.Proxied = true
+			} else {
+				r.Proxied = false
+			}
+
+			updateDNSRecordURI := fmt.Sprintf("%v/zones/%v/dns_records/%v", cf.baseURL, r.ZoneID, r.ID)
+
+			var body []byte
+			body, err = cf.restClient.Put(updateDNSRecordURI, r, cf.authentication)
+			if err != nil {
+				return
+			}
+
+			var ur updateResult
+
+			json.NewDecoder(bytes.NewReader(body)).Decode(&ur)
+
+			if !ur.Success {
+				err = errors.New("cloudflare: update dns record failed")
+				return
+			}
+		}
+	}
 
 	return
 }
