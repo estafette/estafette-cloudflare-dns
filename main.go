@@ -100,6 +100,8 @@ func main() {
 				continue
 			}
 
+			fmt.Printf("Service %v (namespace %v) has changed, processing it...\n", *service.Metadata.Name, *service.Metadata.Namespace)
+
 			processService(cf, client, service)
 		}
 	}()
