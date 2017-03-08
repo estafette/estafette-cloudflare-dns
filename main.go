@@ -94,13 +94,13 @@ func main() {
 
 		// loop indefinitely
 		for {
-			_, service, err := watcher.Next()
+			event, service, err := watcher.Next()
 			if err != nil {
 				log.Println(err)
 				continue
 			}
 
-			fmt.Printf("Service %v (namespace %v) has changed, processing it...\n", *service.Metadata.Name, *service.Metadata.Namespace)
+			fmt.Printf("Service %v (namespace %v) has event of type %v, processing it...\n", *service.Metadata.Name, *service.Metadata.Namespace, *event.Type)
 
 			processService(cf, client, service)
 		}
