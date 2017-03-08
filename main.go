@@ -110,8 +110,6 @@ func main() {
 
 						if &service != nil && &service.Metadata != nil && &service.Metadata.Annotations != nil {
 
-							fmt.Printf("Checking service %v (namespace %v) for %v annotation...\n", *service.Metadata.Name, *namespace.Metadata.Name, annotationKubeCloudflareDNS)
-
 							// get annotations or set default value
 							kubeCloudflareDNS, ok := service.Metadata.Annotations[annotationKubeCloudflareDNS]
 							if !ok {
@@ -166,6 +164,8 @@ func main() {
 										kubeCloudflareState.DNSContent = serviceIPAddress
 										kubeCloudflareState.Hostnames = kubeCloudflareHostnames
 										updateService = true
+									} else {
+										fmt.Printf("Skip updating dns record %v (A) because state hasn't changed...\n", hostname)
 									}
 
 									if kubeCloudflareProxy != kubeCloudflareState.Proxy {
@@ -184,19 +184,26 @@ func main() {
 										// set state annotation
 										kubeCloudflareState.Proxy = kubeCloudflareProxy
 										updateService = true
+									} else {
+										fmt.Printf("Skip updating dns record %v proxied setting because state hasn't changed...\n", hostname)
 									}
+
 									if kubeCloudflareUseOriginRecord != kubeCloudflareState.UseOriginRecord && kubeCloudflareUseOriginRecord == "true" {
 										fmt.Printf("Using origin dns record for dns record %v (A)...\n", hostname)
 
 										// set state annotation
 										kubeCloudflareState.UseOriginRecord = kubeCloudflareUseOriginRecord
 										updateService = true
+									} else {
+										fmt.Printf("Skip updating dns record %v origin record because state hasn't changed...\n", hostname)
 									}
 
 									//dnsRecordsMutations.With(prometheus.Labels{"action": "update", "namespace": *namespace.Metadata.Name}).Inc()
 								}
 
 								if updateService {
+
+									fmt.Printf("Updating service %v (namespace %v) because state has changed...\n", *service.Metadata.Name, *namespace.Metadata.Name)
 
 									// serialize state and store it in the annotation
 									kubeCloudflareStateByteArray, err := json.Marshal(kubeCloudflareState)
