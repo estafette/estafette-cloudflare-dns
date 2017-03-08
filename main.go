@@ -57,16 +57,7 @@ func init() {
 
 func main() {
 
-	// start prometheus
-	go func() {
-		fmt.Println("Serving Prometheus metrics at :9101/metrics...")
-		flag.Parse()
-		http.Handle("/metrics", promhttp.Handler())
-		log.Fatal(http.ListenAndServe(*addr, nil))
-	}()
-
 	// create cloudflare api client
-
 	cfAPIKey := os.Getenv("CF_API_KEY")
 	if cfAPIKey == "" {
 		log.Fatal("CF_API_KEY is required. Please set CF_API_KEY environment variable to your Cloudflare API key.")
@@ -83,6 +74,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// start prometheus
+	go func() {
+		fmt.Println("Serving Prometheus metrics at :9101/metrics...")
+		flag.Parse()
+		http.Handle("/metrics", promhttp.Handler())
+		log.Fatal(http.ListenAndServe(*addr, nil))
+	}()
 
 	// watch services for all namespaces
 	go func() {
