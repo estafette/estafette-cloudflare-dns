@@ -45,6 +45,9 @@ var (
 		},
 		[]string{"device"},
 	)
+
+	// seed random number
+	r = rand.New(rand.NewSource(time.Now().UnixNano()))
 )
 
 func init() {
@@ -61,9 +64,6 @@ func main() {
 		http.Handle("/metrics", promhttp.Handler())
 		log.Fatal(http.ListenAndServe(*addr, nil))
 	}()
-
-	// seed random number
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	// create cloudflare api client
 
@@ -84,47 +84,60 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// loop indefinitely
-	for {
-
-		// fetch all namespaces from cluster
-		fmt.Println("Listing all namespaces...")
-		namespaces, err := client.CoreV1().ListNamespaces(context.Background())
+	// watch services for all namespaces
+	go func() {
+		fmt.Println("Watching services for all namespaces...")
+		watcher, err := client.CoreV1().WatchServices(context.Background(), k8s.AllNamespaces)
 		if err != nil {
 			log.Println(err)
 		}
-		fmt.Printf("Cluster has %v services\n", len(namespaces.Items))
 
-		// loop all namespaces
-		if namespaces != nil && namespaces.Items != nil {
-			for _, namespace := range namespaces.Items {
+		// loop indefinitely
+		for {
+			_, service, err := watcher.Next()
+			if err != nil {
+				log.Println(err)
+				continue
+			}
 
-				// get all services for namespace
-				fmt.Printf("Listing all services for namespace %v...\n", *namespace.Metadata.Name)
-				services, err := client.CoreV1().ListServices(context.Background(), *namespace.Metadata.Name)
+			processService(cf, client, service)
+		}
+	}()
+
+	// loop indefinitely
+	for {
+
+		// get services for all namespaces
+		fmt.Println("Listing services for all namespaces...")
+		services, err := client.CoreV1().ListServices(context.Background(), k8s.AllNamespaces)
+		if err != nil {
+			log.Println(err)
+		}
+		fmt.Printf("Cluster has %v services\n", len(services.Items))
+
+		// loop all services
+		if services != nil && services.Items != nil {
+			for _, service := range services.Items {
+
+				processService(cf, client, service)
 				if err != nil {
-					log.Println(err)
-				}
-				fmt.Printf("Namespace %v has %v services\n", *namespace.Metadata.Name, len(services.Items))
-
-				// loop all services
-				if services != nil && services.Items != nil {
-					for _, service := range services.Items {
-
-						processService(cf, client, service)
-						if err != nil {
-							continue
-						}
-					}
+					continue
 				}
 			}
 		}
 
 		// sleep random time between 20 and 40 seconds
-		sleepTime := 20 + r.Intn(20)
+		sleepTime := applyJitter(120)
 		fmt.Printf("Sleeping for %v seconds...\n", sleepTime)
 		time.Sleep(time.Duration(sleepTime) * time.Second)
 	}
+}
+
+func applyJitter(input int) (output int) {
+
+	deviation := int(0.25 * float64(input))
+
+	return input - deviation + r.Intn(2*deviation)
 }
 
 func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service) error {
