@@ -100,9 +100,12 @@ func main() {
 				continue
 			}
 
-			fmt.Printf("Service %v (namespace %v) has event of type %v, processing it...\n", *service.Metadata.Name, *service.Metadata.Namespace, *event.Type)
-
-			processService(cf, client, service)
+			if *event.Type == k8s.EventAdded || *event.Type == k8s.EventModified {
+				fmt.Printf("Service %v (namespace %v) has event of type %v, processing it...\n", *service.Metadata.Name, *service.Metadata.Namespace, *event.Type)
+				processService(cf, client, service)
+			} else {}
+				fmt.Printf("Service %v (namespace %v) has event of type %v, skipping it...\n", *service.Metadata.Name, *service.Metadata.Namespace, *event.Type)
+			}
 		}
 	}()
 
