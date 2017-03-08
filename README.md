@@ -63,7 +63,6 @@ spec:
 Once it's running put the following annotations on a service of type LoadBalancer and deploy. The estafette-cloudflare-dns application will watch changes to services and process those. Once approximately every 300 seconds it also scans all services as a safety net.
 
 ```yaml
-
 apiVersion: v1
 kind: Service
 metadata:
