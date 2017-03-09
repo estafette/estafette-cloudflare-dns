@@ -101,13 +101,13 @@ func main() {
 					}
 
 					if *event.Type == k8s.EventAdded || *event.Type == k8s.EventModified {
-						fmt.Printf("Service %v (namespace %v) has event of type %v, processing it...\n", *service.Metadata.Name, *service.Metadata.Namespace, *event.Type)
-						err := processService(cf, client, service)
+						//fmt.Printf("Service %v (namespace %v) has event of type %v, processing it...\n", *service.Metadata.Name, *service.Metadata.Namespace, *event.Type)
+						err := processService(cf, client, service, fmt.Sprintf("watcher:%v", *event.Type))
 						if err != nil {
 							continue
 						}
 					} else {
-						fmt.Printf("Service %v (namespace %v) has event of type %v, skipping it...\n", *service.Metadata.Name, *service.Metadata.Namespace, *event.Type)
+						//fmt.Printf("Service %v (namespace %v) has event of type %v, skipping it...\n", *service.Metadata.Name, *service.Metadata.Namespace, *event.Type)
 					}
 				}
 			}
@@ -134,7 +134,7 @@ func main() {
 		if services != nil && services.Items != nil {
 			for _, service := range services.Items {
 
-				err := processService(cf, client, service)
+				err := processService(cf, client, service, "poller")
 				if err != nil {
 					continue
 				}
@@ -155,7 +155,7 @@ func applyJitter(input int) (output int) {
 	return input - deviation + r.Intn(2*deviation)
 }
 
-func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service) error {
+func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, initiator string) error {
 
 	if &service != nil && &service.Metadata != nil && &service.Metadata.Annotations != nil {
 
@@ -200,9 +200,9 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service) 
 
 			// if use origin is enabled, create an A record for the origin
 			if kubeCloudflareUseOriginRecord == "true" && kubeCloudflareOriginRecordHostname != "" {
-				if kubeCloudflareUseOriginRecord != kubeCloudflareState.UseOriginRecord || kubeCloudflareState.OriginRecordHostname != kubeCloudflareOriginRecordHostname {
+				if serviceIPAddress != kubeCloudflareState.IPAddress || kubeCloudflareHostnames != kubeCloudflareState.Hostnames || kubeCloudflareUseOriginRecord != kubeCloudflareState.UseOriginRecord {
 
-					fmt.Printf("Updating origin dns record %v (A) to ip address %v...\n", kubeCloudflareOriginRecordHostname, serviceIPAddress)
+					fmt.Printf("[%v] Service %v.%v - Updating origin dns record %v (A) to ip address %v...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, kubeCloudflareOriginRecordHostname, serviceIPAddress)
 
 					_, err := cf.UpsertDNSRecord("A", kubeCloudflareOriginRecordHostname, serviceIPAddress)
 					if err != nil {
@@ -213,7 +213,7 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service) 
 					// set state annotation
 					updateService = true
 				} else {
-					fmt.Printf("Skip updating origin dns record %v because state hasn't changed...\n", kubeCloudflareOriginRecordHostname)
+					//fmt.Printf("[%v] Service %v.%v - Skip updating origin dns record %v because state hasn't changed...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, kubeCloudflareOriginRecordHostname)
 				}
 			}
 
@@ -226,7 +226,7 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service) 
 
 					if kubeCloudflareUseOriginRecord == "true" && kubeCloudflareOriginRecordHostname != "" && (kubeCloudflareUseOriginRecord != kubeCloudflareState.UseOriginRecord || kubeCloudflareState.OriginRecordHostname != kubeCloudflareOriginRecordHostname) {
 
-						fmt.Printf("Updating dns record %v (CNAME) to value %v...\n", hostname, kubeCloudflareOriginRecordHostname)
+						fmt.Printf("[%v] Service %v.%v - Updating dns record %v (CNAME) to value %v...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, kubeCloudflareOriginRecordHostname)
 
 						_, err := cf.UpsertDNSRecord("CNAME", hostname, kubeCloudflareOriginRecordHostname)
 						if err != nil {
@@ -236,7 +236,7 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service) 
 
 					} else {
 
-						fmt.Printf("Updating dns record %v (A) to ip address %v...\n", hostname, serviceIPAddress)
+						fmt.Printf("[%v] Service %v.%v - Updating dns record %v (A) to ip address %v...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, serviceIPAddress)
 
 						_, err := cf.UpsertDNSRecord("A", hostname, serviceIPAddress)
 						if err != nil {
@@ -249,14 +249,14 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service) 
 					// set state annotation
 					updateService = true
 				} else {
-					fmt.Printf("Skip updating dns record %v (A) because state hasn't changed...\n", hostname)
+					fmt.Printf("[%v] Service %v.%v - Skip updating dns record %v (A) because state hasn't changed...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
 				}
 
 				if kubeCloudflareProxy != kubeCloudflareState.Proxy {
 					if kubeCloudflareProxy == "true" {
-						fmt.Printf("Enabling proxying for dns record %v (A)...\n", hostname)
+						fmt.Printf("[%v] Service %v.%v - Enabling proxying for dns record %v (A)...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
 					} else {
-						fmt.Printf("Disabling proxying for dns record %v (A)...\n", hostname)
+						fmt.Printf("[%v] Service %v.%v - Disabling proxying for dns record %v (A)...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
 					}
 
 					_, err := cf.UpdateProxySetting(hostname, kubeCloudflareProxy)
@@ -268,7 +268,7 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service) 
 					// set state annotation
 					updateService = true
 				} else {
-					fmt.Printf("Skip updating dns record %v proxied setting because state hasn't changed...\n", hostname)
+					fmt.Printf("[%v] Service %v.%v - Skip updating dns record %v proxied setting because state hasn't changed...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
 				}
 
 				//dnsRecordsMutations.With(prometheus.Labels{"action": "update", "namespace": *namespace.Metadata.Name}).Inc()
@@ -283,7 +283,7 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service) 
 				kubeCloudflareState.UseOriginRecord = kubeCloudflareUseOriginRecord
 				kubeCloudflareState.OriginRecordHostname = kubeCloudflareOriginRecordHostname
 
-				fmt.Printf("Updating service %v (namespace %v) because state has changed...\n", *service.Metadata.Name, *service.Metadata.Namespace)
+				fmt.Printf("[%v] Service %v.%v - Updating service because state has changed...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
 
 				// serialize state and store it in the annotation
 				kubeCloudflareStateByteArray, err := json.Marshal(kubeCloudflareState)
