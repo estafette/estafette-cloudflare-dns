@@ -1,6 +1,6 @@
 # estafette-cloudflare-dns
 
-This small Kubernetes application configures dns and proxy settings in Cloudflare for any public service with the correct annotation
+This small Kubernetes application configures dns and proxy settings in Cloudflare for any public service with the correct annotations
 
 [![License](https://img.shields.io/github/license/estafette/estafette-cloudflare-dns.svg)](https://github.com/estafette/estafette-cloudflare-dns/blob/master/LICENSE)
 
