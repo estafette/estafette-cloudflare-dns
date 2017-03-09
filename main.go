@@ -252,12 +252,12 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, 
 					}
 				}
 
-				// if use origin is disabled, remove the A record for the origin
-				if kubeCloudflareUseOriginRecord != "true" || kubeCloudflareOriginRecordHostname == "" {
+				// if use origin is disabled, remove the A record for the origin, if state still has a value for OriginRecordHostname
+				if kubeCloudflareState.OriginRecordHostname != "" && (kubeCloudflareUseOriginRecord != "true" || kubeCloudflareOriginRecordHostname == "") {
 
 					fmt.Printf("[%v] Service %v.%v - Deleting origin dns record %v (A)...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, kubeCloudflareOriginRecordHostname)
 
-					_, err := cf.DeleteDNSRecord(kubeCloudflareOriginRecordHostname)
+					_, err := cf.DeleteDNSRecord(kubeCloudflareState.OriginRecordHostname)
 					if err != nil {
 						log.Println(err)
 						return err
