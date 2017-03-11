@@ -138,8 +138,8 @@ func main() {
 			}
 		}
 
-		// sleep random time between 225 and 375 seconds
-		sleepTime := applyJitter(300)
+		// sleep random time around 900 seconds
+		sleepTime := applyJitter(900)
 		fmt.Printf("Sleeping for %v seconds...\n", sleepTime)
 		time.Sleep(time.Duration(sleepTime) * time.Second)
 	}
