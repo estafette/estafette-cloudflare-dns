@@ -18,16 +18,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-const annotationKubeCloudflareDNS string = "estafette.io/cloudflare-dns"
-const annotationKubeCloudflareHostnames string = "estafette.io/cloudflare-hostnames"
-const annotationKubeCloudflareProxy string = "estafette.io/cloudflare-proxy"
-const annotationKubeCloudflareUseOriginRecord string = "estafette.io/cloudflare-use-origin-record"
-const annotationKubeCloudflareOriginRecordHostname string = "estafette.io/cloudflare-origin-record-hostname"
+const annotationCloudflareDNS string = "estafette.io/cloudflare-dns"
+const annotationCloudflareHostnames string = "estafette.io/cloudflare-hostnames"
+const annotationCloudflareProxy string = "estafette.io/cloudflare-proxy"
+const annotationCloudflareUseOriginRecord string = "estafette.io/cloudflare-use-origin-record"
+const annotationCloudflareOriginRecordHostname string = "estafette.io/cloudflare-origin-record-hostname"
 
-const annotationKubeCloudflareState string = "estafette.io/cloudflare-state"
+const annotationCloudflareState string = "estafette.io/cloudflare-state"
 
-// KubeCloudflareState represents the state of the service at Cloudflare
-type KubeCloudflareState struct {
+// CloudflareState represents the state of the service at Cloudflare
+type CloudflareState struct {
 	Hostnames            string `json:"hostnames"`
 	Proxy                string `json:"proxy"`
 	UseOriginRecord      string `json:"useOriginRecord"`
@@ -157,56 +157,56 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, 
 	if &service != nil && &service.Metadata != nil && &service.Metadata.Annotations != nil {
 
 		// get annotations or set default value
-		kubeCloudflareDNS, ok := service.Metadata.Annotations[annotationKubeCloudflareDNS]
+		cloudflareDNS, ok := service.Metadata.Annotations[annotationCloudflareDNS]
 		if !ok {
-			kubeCloudflareDNS = "false"
+			cloudflareDNS = "false"
 		}
-		kubeCloudflareHostnames, ok := service.Metadata.Annotations[annotationKubeCloudflareHostnames]
+		cloudflareHostnames, ok := service.Metadata.Annotations[annotationCloudflareHostnames]
 		if !ok {
-			kubeCloudflareHostnames = ""
+			cloudflareHostnames = ""
 		}
-		kubeCloudflareProxy, ok := service.Metadata.Annotations[annotationKubeCloudflareProxy]
+		cloudflareProxy, ok := service.Metadata.Annotations[annotationCloudflareProxy]
 		if !ok {
-			kubeCloudflareProxy = "true"
+			cloudflareProxy = "true"
 		}
-		kubeCloudflareUseOriginRecord, ok := service.Metadata.Annotations[annotationKubeCloudflareUseOriginRecord]
+		cloudflareUseOriginRecord, ok := service.Metadata.Annotations[annotationCloudflareUseOriginRecord]
 		if !ok {
-			kubeCloudflareUseOriginRecord = "false"
+			cloudflareUseOriginRecord = "false"
 		}
-		kubeCloudflareOriginRecordHostname, ok := service.Metadata.Annotations[annotationKubeCloudflareOriginRecordHostname]
+		cloudflareOriginRecordHostname, ok := service.Metadata.Annotations[annotationCloudflareOriginRecordHostname]
 		if !ok {
-			kubeCloudflareOriginRecordHostname = ""
+			cloudflareOriginRecordHostname = ""
 		}
 
 		// get state stored in annotations if present or set to empty struct
-		var kubeCloudflareState KubeCloudflareState
-		kubeCloudflareStateString, ok := service.Metadata.Annotations[annotationKubeCloudflareState]
-		if err := json.Unmarshal([]byte(kubeCloudflareStateString), &kubeCloudflareState); err != nil {
+		var cloudflareState CloudflareState
+		cloudflareStateString, ok := service.Metadata.Annotations[annotationCloudflareState]
+		if err := json.Unmarshal([]byte(cloudflareStateString), &cloudflareState); err != nil {
 			// couldn't deserialize, setting to default struct
-			kubeCloudflareState = KubeCloudflareState{}
+			cloudflareState = CloudflareState{}
 		}
 
-		// check if service has travix.io/kube-cloudflare-dns annotation and it's value is true and
-		// check if service has travix.io/kube-cloudflare-hostnames annotation and it's value is not empty and
+		// check if service has estafette.io/cloudflare-dns annotation and it's value is true and
+		// check if service has estafette.io/cloudflare-hostnames annotation and it's value is not empty and
 		// check if type equals LoadBalancer and
 		// check if LoadBalancer has an ip address
-		if kubeCloudflareDNS == "true" && len(kubeCloudflareHostnames) > 0 && *service.Spec.Type == "LoadBalancer" && len(service.Status.LoadBalancer.Ingress) > 0 {
+		if cloudflareDNS == "true" && len(cloudflareHostnames) > 0 && *service.Spec.Type == "LoadBalancer" && len(service.Status.LoadBalancer.Ingress) > 0 {
 
 			serviceIPAddress := *service.Status.LoadBalancer.Ingress[0].Ip
 
 			// update dns record if anything has changed compared to the stored state
-			if serviceIPAddress != kubeCloudflareState.IPAddress ||
-				kubeCloudflareHostnames != kubeCloudflareState.Hostnames ||
-				kubeCloudflareUseOriginRecord != kubeCloudflareState.UseOriginRecord ||
-				kubeCloudflareProxy != kubeCloudflareState.Proxy ||
-				kubeCloudflareOriginRecordHostname != kubeCloudflareState.OriginRecordHostname {
+			if serviceIPAddress != cloudflareState.IPAddress ||
+				cloudflareHostnames != cloudflareState.Hostnames ||
+				cloudflareUseOriginRecord != cloudflareState.UseOriginRecord ||
+				cloudflareProxy != cloudflareState.Proxy ||
+				cloudflareOriginRecordHostname != cloudflareState.OriginRecordHostname {
 
 				// if use origin is enabled, create an A record for the origin
-				if kubeCloudflareUseOriginRecord == "true" && kubeCloudflareOriginRecordHostname != "" {
+				if cloudflareUseOriginRecord == "true" && cloudflareOriginRecordHostname != "" {
 
-					fmt.Printf("[%v] Service %v.%v - Upserting origin dns record %v (A) to ip address %v...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, kubeCloudflareOriginRecordHostname, serviceIPAddress)
+					fmt.Printf("[%v] Service %v.%v - Upserting origin dns record %v (A) to ip address %v...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, cloudflareOriginRecordHostname, serviceIPAddress)
 
-					_, err := cf.UpsertDNSRecord("A", kubeCloudflareOriginRecordHostname, serviceIPAddress)
+					_, err := cf.UpsertDNSRecord("A", cloudflareOriginRecordHostname, serviceIPAddress)
 					if err != nil {
 						log.Println(err)
 						return err
@@ -214,15 +214,15 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, 
 				}
 
 				// loop all hostnames
-				hostnames := strings.Split(kubeCloudflareHostnames, ",")
+				hostnames := strings.Split(cloudflareHostnames, ",")
 				for _, hostname := range hostnames {
 
 					// if use origin is enabled, create a CNAME record pointing to the origin record
-					if kubeCloudflareUseOriginRecord == "true" && kubeCloudflareOriginRecordHostname != "" {
+					if cloudflareUseOriginRecord == "true" && cloudflareOriginRecordHostname != "" {
 
-						fmt.Printf("[%v] Service %v.%v - Upserting dns record %v (CNAME) to value %v...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, kubeCloudflareOriginRecordHostname)
+						fmt.Printf("[%v] Service %v.%v - Upserting dns record %v (CNAME) to value %v...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, cloudflareOriginRecordHostname)
 
-						_, err := cf.UpsertDNSRecord("CNAME", hostname, kubeCloudflareOriginRecordHostname)
+						_, err := cf.UpsertDNSRecord("CNAME", hostname, cloudflareOriginRecordHostname)
 						if err != nil {
 							log.Println(err)
 							return err
@@ -239,13 +239,13 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, 
 					}
 
 					// if proxy is enabled, update it at Cloudflare
-					if kubeCloudflareProxy == "true" {
+					if cloudflareProxy == "true" {
 						fmt.Printf("[%v] Service %v.%v - Enabling proxying for dns record %v (A)...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
 					} else {
 						fmt.Printf("[%v] Service %v.%v - Disabling proxying for dns record %v (A)...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
 					}
 
-					_, err := cf.UpdateProxySetting(hostname, kubeCloudflareProxy)
+					_, err := cf.UpdateProxySetting(hostname, cloudflareProxy)
 					if err != nil {
 						log.Println(err)
 						return err
@@ -253,11 +253,11 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, 
 				}
 
 				// if use origin is disabled, remove the A record for the origin, if state still has a value for OriginRecordHostname
-				if kubeCloudflareState.OriginRecordHostname != "" && (kubeCloudflareUseOriginRecord != "true" || kubeCloudflareOriginRecordHostname == "") {
+				if cloudflareState.OriginRecordHostname != "" && (cloudflareUseOriginRecord != "true" || cloudflareOriginRecordHostname == "") {
 
-					fmt.Printf("[%v] Service %v.%v - Deleting origin dns record %v (A)...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, kubeCloudflareOriginRecordHostname)
+					fmt.Printf("[%v] Service %v.%v - Deleting origin dns record %v (A)...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, cloudflareOriginRecordHostname)
 
-					_, err := cf.DeleteDNSRecord(kubeCloudflareState.OriginRecordHostname)
+					_, err := cf.DeleteDNSRecord(cloudflareState.OriginRecordHostname)
 					if err != nil {
 						log.Println(err)
 						return err
@@ -265,21 +265,21 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, 
 				}
 
 				// if any state property changed make sure to update all
-				kubeCloudflareState.Proxy = kubeCloudflareProxy
-				kubeCloudflareState.IPAddress = serviceIPAddress
-				kubeCloudflareState.Hostnames = kubeCloudflareHostnames
-				kubeCloudflareState.UseOriginRecord = kubeCloudflareUseOriginRecord
-				kubeCloudflareState.OriginRecordHostname = kubeCloudflareOriginRecordHostname
+				cloudflareState.Proxy = cloudflareProxy
+				cloudflareState.IPAddress = serviceIPAddress
+				cloudflareState.Hostnames = cloudflareHostnames
+				cloudflareState.UseOriginRecord = cloudflareUseOriginRecord
+				cloudflareState.OriginRecordHostname = cloudflareOriginRecordHostname
 
 				fmt.Printf("[%v] Service %v.%v - Updating service because state has changed...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
 
 				// serialize state and store it in the annotation
-				kubeCloudflareStateByteArray, err := json.Marshal(kubeCloudflareState)
+				cloudflareStateByteArray, err := json.Marshal(cloudflareState)
 				if err != nil {
 					log.Println(err)
 					return err
 				}
-				service.Metadata.Annotations[annotationKubeCloudflareState] = string(kubeCloudflareStateByteArray)
+				service.Metadata.Annotations[annotationCloudflareState] = string(cloudflareStateByteArray)
 
 				// update service, because the state annotations have changed
 				service, err = client.CoreV1().UpdateService(context.Background(), service)
