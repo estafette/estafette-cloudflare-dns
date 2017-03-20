@@ -38,21 +38,22 @@ type CloudflareState struct {
 var (
 	addr = flag.String("listen-address", ":9101", "The address to listen on for HTTP requests.")
 
-	dnsRecordsMutations = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "estafette_dns_record_mutations",
-			Help: "Number of dns records created or updated.",
-		},
-		[]string{"device"},
-	)
-
 	// seed random number
 	r = rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	// define prometheus counter
+	dnsRecordsTotals = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "estafette_cloudflare_dns_record_totals",
+			Help: "Number of updated Cloudflare dns records.",
+		},
+		[]string{"namespace", "status"},
+	)
 )
 
 func init() {
 	// Metrics have to be registered to be exposed:
-	prometheus.MustRegister(dnsRecordsMutations)
+	prometheus.MustRegister(dnsRecordsTotals)
 }
 
 func main() {
@@ -78,7 +79,6 @@ func main() {
 	// start prometheus
 	go func() {
 		fmt.Println("Serving Prometheus metrics at :9101/metrics...")
-		flag.Parse()
 		http.Handle("/metrics", promhttp.Handler())
 		log.Fatal(http.ListenAndServe(*addr, nil))
 	}()
@@ -101,7 +101,8 @@ func main() {
 					}
 
 					if *event.Type == k8s.EventAdded || *event.Type == k8s.EventModified {
-						err := processService(cf, client, service, fmt.Sprintf("watcher:%v", *event.Type))
+						status, err := processService(cf, client, service, fmt.Sprintf("watcher:%v", *event.Type))
+						dnsRecordsTotals.With(prometheus.Labels{"namespace": *service.Metadata.Namespace, "status": status}).Inc()
 						if err != nil {
 							continue
 						}
@@ -131,7 +132,8 @@ func main() {
 		if services != nil && services.Items != nil {
 			for _, service := range services.Items {
 
-				err := processService(cf, client, service, "poller")
+				status, err := processService(cf, client, service, "poller")
+				dnsRecordsTotals.With(prometheus.Labels{"namespace": *service.Metadata.Namespace, "status": status}).Inc()
 				if err != nil {
 					continue
 				}
@@ -152,7 +154,9 @@ func applyJitter(input int) (output int) {
 	return input - deviation + r.Intn(2*deviation)
 }
 
-func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, initiator string) error {
+func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, initiator string) (status string, err error) {
+
+	status = "failed"
 
 	if &service != nil && &service.Metadata != nil && &service.Metadata.Annotations != nil {
 
@@ -209,7 +213,7 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, 
 					_, err := cf.UpsertDNSRecord("A", cloudflareOriginRecordHostname, serviceIPAddress)
 					if err != nil {
 						log.Println(err)
-						return err
+						return status, err
 					}
 				}
 
@@ -225,7 +229,7 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, 
 						_, err := cf.UpsertDNSRecord("CNAME", hostname, cloudflareOriginRecordHostname)
 						if err != nil {
 							log.Println(err)
-							return err
+							return status, err
 						}
 					} else {
 
@@ -234,7 +238,7 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, 
 						_, err := cf.UpsertDNSRecord("A", hostname, serviceIPAddress)
 						if err != nil {
 							log.Println(err)
-							return err
+							return status, err
 						}
 					}
 
@@ -248,7 +252,7 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, 
 					_, err := cf.UpdateProxySetting(hostname, cloudflareProxy)
 					if err != nil {
 						log.Println(err)
-						return err
+						return status, err
 					}
 				}
 
@@ -260,7 +264,7 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, 
 					_, err := cf.DeleteDNSRecord(cloudflareState.OriginRecordHostname)
 					if err != nil {
 						log.Println(err)
-						return err
+						return status, err
 					}
 				}
 
@@ -277,7 +281,7 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, 
 				cloudflareStateByteArray, err := json.Marshal(cloudflareState)
 				if err != nil {
 					log.Println(err)
-					return err
+					return status, err
 				}
 				service.Metadata.Annotations[annotationCloudflareState] = string(cloudflareStateByteArray)
 
@@ -285,12 +289,17 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, 
 				service, err = client.CoreV1().UpdateService(context.Background(), service)
 				if err != nil {
 					log.Println(err)
-					return err
+					return status, err
 				}
+
+				status = "succeeded"
+
 				fmt.Printf("[%v] Service %v.%v - Service has been updated successfully...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
 			}
 		}
 	}
 
-	return nil
+	status = "skipped"
+
+	return status, nil
 }
