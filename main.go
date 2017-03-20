@@ -47,7 +47,7 @@ var (
 			Name: "estafette_cloudflare_dns_record_totals",
 			Help: "Number of updated Cloudflare dns records.",
 		},
-		[]string{"namespace", "status"},
+		[]string{"namespace", "status", "initiator"},
 	)
 )
 
@@ -102,7 +102,7 @@ func main() {
 
 					if *event.Type == k8s.EventAdded || *event.Type == k8s.EventModified {
 						status, err := processService(cf, client, service, fmt.Sprintf("watcher:%v", *event.Type))
-						dnsRecordsTotals.With(prometheus.Labels{"namespace": *service.Metadata.Namespace, "status": status}).Inc()
+						dnsRecordsTotals.With(prometheus.Labels{"namespace": *service.Metadata.Namespace, "status": status, "initiator": "watcher"}).Inc()
 						if err != nil {
 							continue
 						}
@@ -133,7 +133,7 @@ func main() {
 			for _, service := range services.Items {
 
 				status, err := processService(cf, client, service, "poller")
-				dnsRecordsTotals.With(prometheus.Labels{"namespace": *service.Metadata.Namespace, "status": status}).Inc()
+				dnsRecordsTotals.With(prometheus.Labels{"namespace": *service.Metadata.Namespace, "status": status, "initiator": "poller"}).Inc()
 				if err != nil {
 					continue
 				}
