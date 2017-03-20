@@ -202,7 +202,7 @@ func (cf *Cloudflare) deleteDNSRecordByDNSRecord(dnsRecord DNSRecord) (r deleteR
 	json.NewDecoder(bytes.NewReader(body)).Decode(&r)
 
 	if !r.Success {
-		err = errors.New("cloudflare: deleting dns record failed")
+		err = fmt.Errorf("cloudflare: deleting dns record failed | %v | %v", r.Errors, r.Messages)
 		return
 	}
 
