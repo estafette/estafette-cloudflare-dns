@@ -330,14 +330,35 @@ func (cf *Cloudflare) UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordCon
 
 		r = dnsRecordsResult.DNSRecords[0]
 
-		// update record
-		var cloudflareDNSRecordsUpdateResult updateResult
-		cloudflareDNSRecordsUpdateResult, err = cf.updateDNSRecordByDNSRecord(r, dnsRecordType, dnsRecordContent)
-		if err != nil {
-			return
-		}
+		if dnsRecordType != r.Type {
 
-		r = cloudflareDNSRecordsUpdateResult.DNSRecord
+			// delete record of old type
+			_, err = cf.deleteDNSRecordByDNSRecord(r)
+			if err != nil {
+				return
+			}
+
+			// create record of new type
+			var cloudflareDNSRecordsCreateResult createResult
+			cloudflareDNSRecordsCreateResult, err = cf.createDNSRecordByZone(zone, dnsRecordType, dnsRecordName, dnsRecordContent)
+			if err != nil {
+				return
+			}
+
+			r = cloudflareDNSRecordsCreateResult.DNSRecord
+
+		} else {
+
+			// update record
+			var cloudflareDNSRecordsUpdateResult updateResult
+			cloudflareDNSRecordsUpdateResult, err = cf.updateDNSRecordByDNSRecord(r, dnsRecordType, dnsRecordContent)
+			if err != nil {
+				return
+			}
+
+			r = cloudflareDNSRecordsUpdateResult.DNSRecord
+
+		}
 
 		return
 	}

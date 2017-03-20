@@ -1805,7 +1805,7 @@ func TestUpsertDNSRecord(t *testing.T) {
 		assert.Equal(t, "372e67954025e0ba6aaa6d586b9e0b59", createdDNSRecord.ID)
 	})
 
-	t.Run("ReturnsErrorIfDnsRecordExistsAndTypeIsDifferent", func(t *testing.T) {
+	t.Run("ReturnsNewCertificateIfDnsRecordExistsAndTypeIsDifferent", func(t *testing.T) {
 
 		dnsRecordType := "A"
 		dnsRecordName := "www.example.com"
@@ -1910,13 +1910,50 @@ func TestUpsertDNSRecord(t *testing.T) {
 			}
 		`), nil)
 
+		fakeRESTClient.On("Delete", "https://api.cloudflare.com/client/v4/zones/023e105f4ecef8ad9ca31a8372d0c353/dns_records/372e67954025e0ba6aaa6d586b9e0b59", authentication).Return([]byte(`
+			{
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": {
+					"id": "372e67954025e0ba6aaa6d586b9e0b59"
+				}
+			}
+		`), nil)
+
+		newDNSRecord := DNSRecord{Type: dnsRecordType, Name: dnsRecordName, Content: dnsRecordContent}
+
+		fakeRESTClient.On("Post", "https://api.cloudflare.com/client/v4/zones/023e105f4ecef8ad9ca31a8372d0c353/dns_records", newDNSRecord, authentication).Return([]byte(`
+			{
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": {
+					"id": "6aaa6d586b9e0b59372e67954025e0ba",
+					"type": "A",
+					"name": "www.example.com",
+					"content": "1.2.3.4",
+					"proxiable": true,
+					"proxied": false,
+					"ttl": 120,
+					"locked": false,
+					"zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+					"zone_name": "example.com",
+					"created_on": "2014-01-01T05:20:00.12345Z",
+					"modified_on": "2014-01-01T05:20:00.12345Z",
+					"data": {}
+				}
+			}
+		`), nil)
+
 		apiClient := New(authentication)
 		apiClient.restClient = fakeRESTClient
 
 		// act
-		_, err := apiClient.UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordContent)
+		createdDNSRecord, err := apiClient.UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordContent)
 
-		assert.NotNil(t, err)
+		assert.Nil(t, err)
+		assert.Equal(t, "6aaa6d586b9e0b59372e67954025e0ba", createdDNSRecord.ID)
 	})
 
 	t.Run("ReturnsErrorIfDnsRecordExistsAndUpdateFailed", func(t *testing.T) {
