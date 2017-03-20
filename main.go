@@ -295,6 +295,8 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, 
 				status = "succeeded"
 
 				fmt.Printf("[%v] Service %v.%v - Service has been updated successfully...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
+
+				return status, nil
 			}
 		}
 	}
