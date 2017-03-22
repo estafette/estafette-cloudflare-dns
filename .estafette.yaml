@@ -6,7 +6,7 @@ labels:
 pipelines:
   build:
     image: golang:1.8.0-alpine
-    workDir: /go/src/github.com/estafette/estafette-cloudflare-dns
+    workDir: /go/src/github.com/estafette/${ESTAFETTE_LABEL_APP}
     commands:
     - go test ./...
     - CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o ./publish/${ESTAFETTE_LABEL_APP} .
