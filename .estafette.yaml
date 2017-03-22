@@ -17,3 +17,5 @@ pipelines:
     - cp Dockerfile ./publish
     - cp /etc/ssl/certs/ca-certificates.crt ./publish
     - docker build -t ${ESTAFETTE_LABEL_APP} ./publish
+    - ls -latr ./publish
+    - rm -rf ./publish
