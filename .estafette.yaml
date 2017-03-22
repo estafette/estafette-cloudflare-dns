@@ -9,11 +9,11 @@ pipelines:
     workDir: /go/src/github.com/estafette/estafette-cloudflare-dns
     commands:
     - go test ./...
-    - CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o ./publish/estafette-cloudflare-dns .
+    - CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o ./publish/${ESTAFETTE_LABEL_APP} .
 
   bake:
     image: docker:17.03.0-ce
     commands:
     - cp Dockerfile ./publish
     - cp /etc/ssl/certs/ca-certificates.crt ./publish
-    - docker build -t estafette-cloudflare-dns ./publish
+    - docker build -t ${ESTAFETTE_LABEL_APP} ./publish
