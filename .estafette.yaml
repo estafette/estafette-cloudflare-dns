@@ -15,4 +15,5 @@ pipelines:
     image: docker:17.03.0-ce
     commands:
     - cp Dockerfile ./publish
+    - cp /etc/ssl/certs/ca-certificates.crt ./publish
     - docker build -t estafette-cloudflare-dns ./publish
