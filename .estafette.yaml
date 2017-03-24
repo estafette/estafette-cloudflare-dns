@@ -16,6 +16,12 @@ pipelines:
     commands:
     - cp Dockerfile ./publish
     - cp /etc/ssl/certs/ca-certificates.crt ./publish
-    - docker build -t ${ESTAFETTE_LABEL_APP} ./publish
+    - docker build -t estafette/${ESTAFETTE_LABEL_APP}:${ESTAFETTE_BUILD_VERSION} ./publish
     - ls -latr ./publish
     - rm -rf ./publish
+
+  push-to-docker-hub:
+    image: docker:17.03.0-ce
+    commands:
+    - docker login --username ${ESTAFETTE_DOCKER_HUB_USERNAME} --pasword ${ESTAFETTE_DOCKER_HUB_PASSWORD}
+    - docker push estafette/${ESTAFETTE_LABEL_APP}:${ESTAFETTE_BUILD_VERSION}
