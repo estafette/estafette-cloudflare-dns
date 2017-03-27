@@ -14,12 +14,9 @@ pipelines:
   bake:
     image: docker:17.03.0-ce
     commands:
-    - docker info
     - cp Dockerfile ./publish
     - cp /etc/ssl/certs/ca-certificates.crt ./publish
     - docker build -t estafette/${ESTAFETTE_LABEL_APP}:${ESTAFETTE_BUILD_VERSION} ./publish
-    - ls -latr ./publish
-    - rm -rf ./publish
 
   push-to-docker-hub:
     image: docker:17.03.0-ce
