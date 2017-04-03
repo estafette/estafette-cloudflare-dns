@@ -28,6 +28,7 @@ const annotationCloudflareState string = "estafette.io/cloudflare-state"
 
 // CloudflareState represents the state of the service at Cloudflare
 type CloudflareState struct {
+	Enabled              string `json:"enables"`
 	Hostnames            string `json:"hostnames"`
 	Proxy                string `json:"proxy"`
 	UseOriginRecord      string `json:"useOriginRecord"`
@@ -154,151 +155,183 @@ func applyJitter(input int) (output int) {
 	return input - deviation + r.Intn(2*deviation)
 }
 
+func getDesiredState(service *apiv1.Service) (state CloudflareState) {
+
+	var ok bool
+
+	state.Enabled, ok = service.Metadata.Annotations[annotationCloudflareDNS]
+	if !ok {
+		state.Enabled = "false"
+	}
+	state.Hostnames, ok = service.Metadata.Annotations[annotationCloudflareHostnames]
+	if !ok {
+		state.Hostnames = ""
+	}
+	state.Proxy, ok = service.Metadata.Annotations[annotationCloudflareProxy]
+	if !ok {
+		state.Proxy = "true"
+	}
+	state.UseOriginRecord, ok = service.Metadata.Annotations[annotationCloudflareUseOriginRecord]
+	if !ok {
+		state.UseOriginRecord = "false"
+	}
+	state.OriginRecordHostname, ok = service.Metadata.Annotations[annotationCloudflareOriginRecordHostname]
+	if !ok {
+		state.OriginRecordHostname = ""
+	}
+
+	if *service.Spec.Type == "LoadBalancer" && len(service.Status.LoadBalancer.Ingress) > 0 {
+		state.IPAddress = *service.Status.LoadBalancer.Ingress[0].Ip
+	}
+
+	return
+}
+
+func getCurrentState(service *apiv1.Service) (state CloudflareState) {
+
+	// get state stored in annotations if present or set to empty struct
+	cloudflareStateString, ok := service.Metadata.Annotations[annotationCloudflareState]
+	if !ok {
+		// couldn't find saved state, setting to default struct
+		state = CloudflareState{}
+		return
+	}
+
+	if err := json.Unmarshal([]byte(cloudflareStateString), &state); err != nil {
+		// couldn't deserialize, setting to default struct
+		state = CloudflareState{}
+		return
+	}
+
+	// return deserialized state
+	return
+}
+
+func makeChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, initiator string, desiredState, currentState CloudflareState) (status string, err error) {
+
+	status = "failed"
+
+	// check if service has estafette.io/cloudflare-dns annotation and it's value is true and
+	// check if service has estafette.io/cloudflare-hostnames annotation and it's value is not empty and
+	// check if type equals LoadBalancer and
+	// check if LoadBalancer has an ip address
+	if desiredState.Enabled == "true" && len(desiredState.Hostnames) > 0 && desiredState.IPAddress != "" {
+
+		// update dns record if anything has changed compared to the stored state
+		if desiredState.IPAddress != currentState.IPAddress ||
+			desiredState.Hostnames != currentState.Hostnames ||
+			desiredState.Proxy != currentState.Proxy ||
+			desiredState.UseOriginRecord != currentState.UseOriginRecord ||
+			desiredState.OriginRecordHostname != currentState.OriginRecordHostname {
+
+			// if use origin is enabled, create an A record for the origin
+			if desiredState.UseOriginRecord == "true" && desiredState.OriginRecordHostname != "" {
+
+				fmt.Printf("[%v] Service %v.%v - Upserting origin dns record %v (A) to ip address %v...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, desiredState.OriginRecordHostname, desiredState.IPAddress)
+
+				_, err := cf.UpsertDNSRecord("A", desiredState.OriginRecordHostname, desiredState.IPAddress)
+				if err != nil {
+					log.Println(err)
+					return status, err
+				}
+			}
+
+			// loop all hostnames
+			hostnames := strings.Split(desiredState.Hostnames, ",")
+			for _, hostname := range hostnames {
+
+				// if use origin is enabled, create a CNAME record pointing to the origin record
+				if desiredState.UseOriginRecord == "true" && desiredState.OriginRecordHostname != "" {
+
+					fmt.Printf("[%v] Service %v.%v - Upserting dns record %v (CNAME) to value %v...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, desiredState.OriginRecordHostname)
+
+					_, err := cf.UpsertDNSRecord("CNAME", hostname, desiredState.OriginRecordHostname)
+					if err != nil {
+						log.Println(err)
+						return status, err
+					}
+				} else {
+
+					fmt.Printf("[%v] Service %v.%v - Upserting dns record %v (A) to ip address %v...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, desiredState.IPAddress)
+
+					_, err := cf.UpsertDNSRecord("A", hostname, desiredState.IPAddress)
+					if err != nil {
+						log.Println(err)
+						return status, err
+					}
+				}
+
+				// if proxy is enabled, update it at Cloudflare
+				if desiredState.Proxy == "true" {
+					fmt.Printf("[%v] Service %v.%v - Enabling proxying for dns record %v (A)...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
+				} else {
+					fmt.Printf("[%v] Service %v.%v - Disabling proxying for dns record %v (A)...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
+				}
+
+				_, err := cf.UpdateProxySetting(hostname, desiredState.Proxy)
+				if err != nil {
+					log.Println(err)
+					return status, err
+				}
+			}
+
+			// if use origin is disabled, remove the A record for the origin, if state still has a value for OriginRecordHostname
+			if desiredState.OriginRecordHostname != "" && (desiredState.UseOriginRecord != "true" || desiredState.OriginRecordHostname == "") {
+
+				fmt.Printf("[%v] Service %v.%v - Deleting origin dns record %v (A)...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, desiredState.OriginRecordHostname)
+
+				_, err := cf.DeleteDNSRecord(desiredState.OriginRecordHostname)
+				if err != nil {
+					log.Println(err)
+					return status, err
+				}
+			}
+
+			// if any state property changed make sure to update all
+			currentState = desiredState
+
+			fmt.Printf("[%v] Service %v.%v - Updating service because state has changed...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
+
+			// serialize state and store it in the annotation
+			cloudflareStateByteArray, err := json.Marshal(currentState)
+			if err != nil {
+				log.Println(err)
+				return status, err
+			}
+			service.Metadata.Annotations[annotationCloudflareState] = string(cloudflareStateByteArray)
+
+			// update service, because the state annotations have changed
+			service, err = client.CoreV1().UpdateService(context.Background(), service)
+			if err != nil {
+				log.Println(err)
+				return status, err
+			}
+
+			status = "succeeded"
+
+			fmt.Printf("[%v] Service %v.%v - Service has been updated successfully...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
+
+			return status, nil
+		}
+	}
+
+	status = "skipped"
+
+	return status, nil
+}
+
 func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, initiator string) (status string, err error) {
 
 	status = "failed"
 
 	if &service != nil && &service.Metadata != nil && &service.Metadata.Annotations != nil {
 
-		// get annotations or set default value
-		cloudflareDNS, ok := service.Metadata.Annotations[annotationCloudflareDNS]
-		if !ok {
-			cloudflareDNS = "false"
-		}
-		cloudflareHostnames, ok := service.Metadata.Annotations[annotationCloudflareHostnames]
-		if !ok {
-			cloudflareHostnames = ""
-		}
-		cloudflareProxy, ok := service.Metadata.Annotations[annotationCloudflareProxy]
-		if !ok {
-			cloudflareProxy = "true"
-		}
-		cloudflareUseOriginRecord, ok := service.Metadata.Annotations[annotationCloudflareUseOriginRecord]
-		if !ok {
-			cloudflareUseOriginRecord = "false"
-		}
-		cloudflareOriginRecordHostname, ok := service.Metadata.Annotations[annotationCloudflareOriginRecordHostname]
-		if !ok {
-			cloudflareOriginRecordHostname = ""
-		}
+		desiredState := getDesiredState(service)
+		currentState := getCurrentState(service)
 
-		// get state stored in annotations if present or set to empty struct
-		var cloudflareState CloudflareState
-		cloudflareStateString, ok := service.Metadata.Annotations[annotationCloudflareState]
-		if err := json.Unmarshal([]byte(cloudflareStateString), &cloudflareState); err != nil {
-			// couldn't deserialize, setting to default struct
-			cloudflareState = CloudflareState{}
-		}
+		status, err = makeChanges(cf, client, service, initiator, desiredState, currentState)
 
-		// check if service has estafette.io/cloudflare-dns annotation and it's value is true and
-		// check if service has estafette.io/cloudflare-hostnames annotation and it's value is not empty and
-		// check if type equals LoadBalancer and
-		// check if LoadBalancer has an ip address
-		if cloudflareDNS == "true" && len(cloudflareHostnames) > 0 && *service.Spec.Type == "LoadBalancer" && len(service.Status.LoadBalancer.Ingress) > 0 {
-
-			serviceIPAddress := *service.Status.LoadBalancer.Ingress[0].Ip
-
-			// update dns record if anything has changed compared to the stored state
-			if serviceIPAddress != cloudflareState.IPAddress ||
-				cloudflareHostnames != cloudflareState.Hostnames ||
-				cloudflareUseOriginRecord != cloudflareState.UseOriginRecord ||
-				cloudflareProxy != cloudflareState.Proxy ||
-				cloudflareOriginRecordHostname != cloudflareState.OriginRecordHostname {
-
-				// if use origin is enabled, create an A record for the origin
-				if cloudflareUseOriginRecord == "true" && cloudflareOriginRecordHostname != "" {
-
-					fmt.Printf("[%v] Service %v.%v - Upserting origin dns record %v (A) to ip address %v...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, cloudflareOriginRecordHostname, serviceIPAddress)
-
-					_, err := cf.UpsertDNSRecord("A", cloudflareOriginRecordHostname, serviceIPAddress)
-					if err != nil {
-						log.Println(err)
-						return status, err
-					}
-				}
-
-				// loop all hostnames
-				hostnames := strings.Split(cloudflareHostnames, ",")
-				for _, hostname := range hostnames {
-
-					// if use origin is enabled, create a CNAME record pointing to the origin record
-					if cloudflareUseOriginRecord == "true" && cloudflareOriginRecordHostname != "" {
-
-						fmt.Printf("[%v] Service %v.%v - Upserting dns record %v (CNAME) to value %v...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, cloudflareOriginRecordHostname)
-
-						_, err := cf.UpsertDNSRecord("CNAME", hostname, cloudflareOriginRecordHostname)
-						if err != nil {
-							log.Println(err)
-							return status, err
-						}
-					} else {
-
-						fmt.Printf("[%v] Service %v.%v - Upserting dns record %v (A) to ip address %v...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, serviceIPAddress)
-
-						_, err := cf.UpsertDNSRecord("A", hostname, serviceIPAddress)
-						if err != nil {
-							log.Println(err)
-							return status, err
-						}
-					}
-
-					// if proxy is enabled, update it at Cloudflare
-					if cloudflareProxy == "true" {
-						fmt.Printf("[%v] Service %v.%v - Enabling proxying for dns record %v (A)...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
-					} else {
-						fmt.Printf("[%v] Service %v.%v - Disabling proxying for dns record %v (A)...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
-					}
-
-					_, err := cf.UpdateProxySetting(hostname, cloudflareProxy)
-					if err != nil {
-						log.Println(err)
-						return status, err
-					}
-				}
-
-				// if use origin is disabled, remove the A record for the origin, if state still has a value for OriginRecordHostname
-				if cloudflareState.OriginRecordHostname != "" && (cloudflareUseOriginRecord != "true" || cloudflareOriginRecordHostname == "") {
-
-					fmt.Printf("[%v] Service %v.%v - Deleting origin dns record %v (A)...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, cloudflareOriginRecordHostname)
-
-					_, err := cf.DeleteDNSRecord(cloudflareState.OriginRecordHostname)
-					if err != nil {
-						log.Println(err)
-						return status, err
-					}
-				}
-
-				// if any state property changed make sure to update all
-				cloudflareState.Proxy = cloudflareProxy
-				cloudflareState.IPAddress = serviceIPAddress
-				cloudflareState.Hostnames = cloudflareHostnames
-				cloudflareState.UseOriginRecord = cloudflareUseOriginRecord
-				cloudflareState.OriginRecordHostname = cloudflareOriginRecordHostname
-
-				fmt.Printf("[%v] Service %v.%v - Updating service because state has changed...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
-
-				// serialize state and store it in the annotation
-				cloudflareStateByteArray, err := json.Marshal(cloudflareState)
-				if err != nil {
-					log.Println(err)
-					return status, err
-				}
-				service.Metadata.Annotations[annotationCloudflareState] = string(cloudflareStateByteArray)
-
-				// update service, because the state annotations have changed
-				service, err = client.CoreV1().UpdateService(context.Background(), service)
-				if err != nil {
-					log.Println(err)
-					return status, err
-				}
-
-				status = "succeeded"
-
-				fmt.Printf("[%v] Service %v.%v - Service has been updated successfully...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
-
-				return status, nil
-			}
-		}
+		return
 	}
 
 	status = "skipped"
