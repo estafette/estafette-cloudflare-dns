@@ -29,7 +29,7 @@ const annotationCloudflareState string = "estafette.io/cloudflare-state"
 
 // CloudflareState represents the state of the service at Cloudflare
 type CloudflareState struct {
-	Enabled              string `json:"enables"`
+	Enabled              string `json:"enabled"`
 	Hostnames            string `json:"hostnames"`
 	Proxy                string `json:"proxy"`
 	UseOriginRecord      string `json:"useOriginRecord"`
