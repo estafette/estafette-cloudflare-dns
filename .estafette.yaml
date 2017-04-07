@@ -8,9 +8,8 @@ pipelines:
     image: golang:1.8.0-alpine
     workDir: /go/src/github.com/estafette/${ESTAFETTE_LABEL_APP}
     commands:
-    - apk --update add git
     - go test `go list ./... | grep -v /vendor/`
-    - CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags "-X main.version=${ESTAFETTE_BUILD_VERSION} -X main.revision=`git rev-parse HEAD` -X main.branch=`git rev-parse --abbrev-ref HEAD` -X main.buildDate=`date -u +"%Y-%m-%dT%H:%M:%SZ"`" -o ./publish/${ESTAFETTE_LABEL_APP} .
+    - CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags "-X main.version=${ESTAFETTE_BUILD_VERSION} -X main.revision=${ESTAFETTE_GIT_REVISION} -X main.branch=${ESTAFETTE_GIT_BRANCH} -X main.buildDate=${ESTAFETTE_BUILD_DATETIME}" -o ./publish/${ESTAFETTE_LABEL_APP} .
 
   bake:
     image: docker:17.03.0-ce
