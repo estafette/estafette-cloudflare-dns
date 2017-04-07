@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -38,6 +39,14 @@ type CloudflareState struct {
 }
 
 var (
+	version   string
+	branch    string
+	revision  string
+	buildDate string
+	goVersion = runtime.Version()
+)
+
+var (
 	addr = flag.String("listen-address", ":9101", "The address to listen on for HTTP requests.")
 
 	// seed random number
@@ -59,6 +68,8 @@ func init() {
 }
 
 func main() {
+
+	fmt.Printf("Starting estafette-cloudflare-dns (version=%v, branch=%v, revision=%v, buildDate=%v, goVersion=%v)\n", version, branch, revision, buildDate, goVersion)
 
 	// create cloudflare api client
 	cfAPIKey := os.Getenv("CF_API_KEY")
