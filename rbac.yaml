@@ -1,0 +1,27 @@
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: estafette-cloudflare-dns
+  labels:
+    app: estafette-cloudflare-dns
+rules:
+- apiGroups: [""] # "" indicates the core API group
+  resources:
+  - services
+  - ingresses
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: estafette-cloudflare-dns
+  labels:
+    app: estafette-cloudflare-dns
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: estafette-cloudflare-dns
+subjects:
+- kind: ServiceAccount
+  name: estafette-cloudflare-dns
+  namespace: estafette

@@ -8,19 +8,9 @@ kind: ServiceAccount
 metadata:
   name: ${APP_NAME}
   namespace: ${NAMESPACE}
----
-apiVersion: rbac.authorization.k8s.io/v1beta1
-kind: ClusterRoleBinding
-metadata:
-  name: ${APP_NAME}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: ${APP_NAME}
-subjects:
-- kind: ServiceAccount
-  name: ${APP_NAME}
-  namespace: ${NAMESPACE}
+  labels:
+    app: ${APP_NAME}
+    team: ${TEAM_NAME}
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment
