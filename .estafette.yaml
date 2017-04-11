@@ -23,3 +23,8 @@ pipelines:
     commands:
     - docker login --username=${ESTAFETTE_DOCKER_HUB_USERNAME} --password='${ESTAFETTE_DOCKER_HUB_PASSWORD}'
     - docker push estafette/${ESTAFETTE_LABEL_APP}:${ESTAFETTE_BUILD_VERSION}
+
+  slack-notify:
+    image: docker:17.04.0-ce
+    commands:
+    - 'curl -X POST --data-urlencode ''payload={"channel": "#build-status", "username": "estafette-ci-builder", "text": "Build ${ESTAFETTE_BUILD_VERSION} for ${ESTAFETTE_LABEL_APP} has finished successfully!"}'' ${ESTAFETTE_SLACK_WEBHOOK}'
