@@ -117,6 +117,7 @@ func main() {
 						status, err := processService(cf, client, service, fmt.Sprintf("watcher:%v", *event.Type))
 						dnsRecordsTotals.With(prometheus.Labels{"namespace": *service.Metadata.Namespace, "status": status, "initiator": "watcher", "type": "service"}).Inc()
 						if err != nil {
+							log.Println(err)
 							continue
 						}
 					}
@@ -151,6 +152,7 @@ func main() {
 						status, err := processIngress(cf, client, ingress, fmt.Sprintf("watcher:%v", *event.Type))
 						dnsRecordsTotals.With(prometheus.Labels{"namespace": *ingress.Metadata.Namespace, "status": status, "initiator": "watcher", "type": "ingress"}).Inc()
 						if err != nil {
+							log.Println(err)
 							continue
 						}
 					}
@@ -182,6 +184,7 @@ func main() {
 				status, err := processService(cf, client, service, "poller")
 				dnsRecordsTotals.With(prometheus.Labels{"namespace": *service.Metadata.Namespace, "status": status, "initiator": "poller", "type": "service"}).Inc()
 				if err != nil {
+					log.Println(err)
 					continue
 				}
 			}
@@ -202,6 +205,7 @@ func main() {
 				status, err := processIngress(cf, client, ingress, "poller")
 				dnsRecordsTotals.With(prometheus.Labels{"namespace": *ingress.Metadata.Namespace, "status": status, "initiator": "poller", "type": "ingress"}).Inc()
 				if err != nil {
+					log.Println(err)
 					continue
 				}
 			}
