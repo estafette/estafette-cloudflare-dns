@@ -106,7 +106,10 @@ func main() {
 
 	// start prometheus
 	go func() {
-		fmt.Println("Serving Prometheus metrics at :9101/metrics...")
+		log.Info().
+			Str("port", *addr).
+			Msg("Serving Prometheus metrics...")
+
 		http.Handle("/metrics", promhttp.Handler())
 
 		if err := http.ListenAndServe(*addr, nil); err != nil {
@@ -118,7 +121,7 @@ func main() {
 	go func() {
 		// loop indefinitely
 		for {
-			fmt.Println("Watching services for all namespaces...")
+			log.Info().Msg("Watching services for all namespaces...")
 			watcher, err := client.CoreV1().WatchServices(context.Background(), k8s.AllNamespaces)
 			if err != nil {
 				log.Error().Err(err).Msg("WatchServices call failed")
@@ -144,7 +147,7 @@ func main() {
 
 			// sleep random time between 22 and 37 seconds
 			sleepTime := applyJitter(30)
-			fmt.Printf("Sleeping for %v seconds...\n", sleepTime)
+			log.Info().Msgf("Sleeping for %v seconds...", sleepTime)
 			time.Sleep(time.Duration(sleepTime) * time.Second)
 		}
 	}()
@@ -153,7 +156,7 @@ func main() {
 	go func() {
 		// loop indefinitely
 		for {
-			fmt.Println("Watching ingresses for all namespaces...")
+			log.Info().Msg("Watching ingresses for all namespaces...")
 			watcher, err := client.ExtensionsV1Beta1().WatchIngresses(context.Background(), k8s.AllNamespaces)
 			if err != nil {
 				log.Error().Err(err).Msg("WatchIngresses call failed")
@@ -179,7 +182,7 @@ func main() {
 
 			// sleep random time between 22 and 37 seconds
 			sleepTime := applyJitter(30)
-			fmt.Printf("Sleeping for %v seconds...\n", sleepTime)
+			log.Info().Msgf("Sleeping for %v seconds...", sleepTime)
 			time.Sleep(time.Duration(sleepTime) * time.Second)
 		}
 	}()
@@ -188,12 +191,12 @@ func main() {
 	for {
 
 		// get services for all namespaces
-		fmt.Println("Listing services for all namespaces...")
+		log.Info().Msg("Listing services for all namespaces...")
 		services, err := client.CoreV1().ListServices(context.Background(), k8s.AllNamespaces)
 		if err != nil {
 			log.Error().Err(err).Msg("ListServices call failed")
 		}
-		fmt.Printf("Cluster has %v services\n", len(services.Items))
+		log.Info().Msgf("Cluster has %v services", len(services.Items))
 
 		// loop all services
 		if services != nil && services.Items != nil {
@@ -209,12 +212,12 @@ func main() {
 		}
 
 		// get ingresses for all namespaces
-		fmt.Println("Listing ingresses for all namespaces...")
+		log.Info().Msg("Listing ingresses for all namespaces...")
 		ingresses, err := client.ExtensionsV1Beta1().ListIngresses(context.Background(), k8s.AllNamespaces)
 		if err != nil {
 			log.Error().Err(err).Msg("ListIngresses call failed")
 		}
-		fmt.Printf("Cluster has %v ingresses\n", len(ingresses.Items))
+		log.Info().Msgf("Cluster has %v ingresses", len(ingresses.Items))
 
 		// loop all ingresses
 		if ingresses != nil && ingresses.Items != nil {
@@ -231,7 +234,7 @@ func main() {
 
 		// sleep random time around 900 seconds
 		sleepTime := applyJitter(900)
-		fmt.Printf("Sleeping for %v seconds...\n", sleepTime)
+		log.Info().Msgf("Sleeping for %v seconds...", sleepTime)
 		time.Sleep(time.Duration(sleepTime) * time.Second)
 	}
 }
@@ -315,7 +318,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 			// if use origin is enabled, create an A record for the origin
 			if desiredState.UseOriginRecord == "true" && desiredState.OriginRecordHostname != "" {
 
-				fmt.Printf("[%v] Service %v.%v - Upserting origin dns record %v (A) to ip address %v...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, desiredState.OriginRecordHostname, desiredState.IPAddress)
+				log.Info().Msgf("[%v] Service %v.%v - Upserting origin dns record %v (A) to ip address %v...", initiator, *service.Metadata.Name, *service.Metadata.Namespace, desiredState.OriginRecordHostname, desiredState.IPAddress)
 
 				_, err := cf.UpsertDNSRecord("A", desiredState.OriginRecordHostname, desiredState.IPAddress)
 				if err != nil {
@@ -331,7 +334,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 				// if use origin is enabled, create a CNAME record pointing to the origin record
 				if desiredState.UseOriginRecord == "true" && desiredState.OriginRecordHostname != "" {
 
-					fmt.Printf("[%v] Service %v.%v - Upserting dns record %v (CNAME) to value %v...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, desiredState.OriginRecordHostname)
+					log.Info().Msgf("[%v] Service %v.%v - Upserting dns record %v (CNAME) to value %v...", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, desiredState.OriginRecordHostname)
 
 					_, err := cf.UpsertDNSRecord("CNAME", hostname, desiredState.OriginRecordHostname)
 					if err != nil {
@@ -340,7 +343,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 					}
 				} else {
 
-					fmt.Printf("[%v] Service %v.%v - Upserting dns record %v (A) to ip address %v...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, desiredState.IPAddress)
+					log.Info().Msgf("[%v] Service %v.%v - Upserting dns record %v (A) to ip address %v...", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, desiredState.IPAddress)
 
 					_, err := cf.UpsertDNSRecord("A", hostname, desiredState.IPAddress)
 					if err != nil {
@@ -351,9 +354,9 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 
 				// if proxy is enabled, update it at Cloudflare
 				if desiredState.Proxy == "true" {
-					fmt.Printf("[%v] Service %v.%v - Enabling proxying for dns record %v (A)...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
+					log.Info().Msgf("[%v] Service %v.%v - Enabling proxying for dns record %v (A)...", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
 				} else {
-					fmt.Printf("[%v] Service %v.%v - Disabling proxying for dns record %v (A)...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
+					log.Info().Msgf("[%v] Service %v.%v - Disabling proxying for dns record %v (A)...", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
 				}
 
 				_, err := cf.UpdateProxySetting(hostname, desiredState.Proxy)
@@ -366,7 +369,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 			// if use origin is disabled, remove the A record for the origin, if state still has a value for OriginRecordHostname
 			if desiredState.OriginRecordHostname != "" && (desiredState.UseOriginRecord != "true" || desiredState.OriginRecordHostname == "") {
 
-				fmt.Printf("[%v] Service %v.%v - Deleting origin dns record %v (A)...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace, desiredState.OriginRecordHostname)
+				log.Info().Msgf("[%v] Service %v.%v - Deleting origin dns record %v (A)...", initiator, *service.Metadata.Name, *service.Metadata.Namespace, desiredState.OriginRecordHostname)
 
 				_, err := cf.DeleteDNSRecord(desiredState.OriginRecordHostname)
 				if err != nil {
@@ -378,7 +381,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 			// if any state property changed make sure to update all
 			currentState = desiredState
 
-			fmt.Printf("[%v] Service %v.%v - Updating service because state has changed...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
+			log.Info().Msgf("[%v] Service %v.%v - Updating service because state has changed...", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
 
 			// serialize state and store it in the annotation
 			cloudflareStateByteArray, err := json.Marshal(currentState)
@@ -397,7 +400,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 
 			status = "succeeded"
 
-			fmt.Printf("[%v] Service %v.%v - Service has been updated successfully...\n", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
+			log.Info().Msgf("[%v] Service %v.%v - Service has been updated successfully...", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
 
 			return status, nil
 		}
@@ -499,7 +502,7 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 			// if use origin is enabled, create an A record for the origin
 			if desiredState.UseOriginRecord == "true" && desiredState.OriginRecordHostname != "" {
 
-				fmt.Printf("[%v] Ingress %v.%v - Upserting origin dns record %v (A) to ip address %v...\n", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, desiredState.OriginRecordHostname, desiredState.IPAddress)
+				log.Info().Msgf("[%v] Ingress %v.%v - Upserting origin dns record %v (A) to ip address %v...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, desiredState.OriginRecordHostname, desiredState.IPAddress)
 
 				_, err := cf.UpsertDNSRecord("A", desiredState.OriginRecordHostname, desiredState.IPAddress)
 				if err != nil {
@@ -515,7 +518,7 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 				// if use origin is enabled, create a CNAME record pointing to the origin record
 				if desiredState.UseOriginRecord == "true" && desiredState.OriginRecordHostname != "" {
 
-					fmt.Printf("[%v] Ingress %v.%v - Upserting dns record %v (CNAME) to value %v...\n", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname, desiredState.OriginRecordHostname)
+					log.Info().Msgf("[%v] Ingress %v.%v - Upserting dns record %v (CNAME) to value %v...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname, desiredState.OriginRecordHostname)
 
 					_, err := cf.UpsertDNSRecord("CNAME", hostname, desiredState.OriginRecordHostname)
 					if err != nil {
@@ -524,7 +527,7 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 					}
 				} else {
 
-					fmt.Printf("[%v] Ingress %v.%v - Upserting dns record %v (A) to ip address %v...\n", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname, desiredState.IPAddress)
+					log.Info().Msgf("[%v] Ingress %v.%v - Upserting dns record %v (A) to ip address %v...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname, desiredState.IPAddress)
 
 					_, err := cf.UpsertDNSRecord("A", hostname, desiredState.IPAddress)
 					if err != nil {
@@ -535,9 +538,9 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 
 				// if proxy is enabled, update it at Cloudflare
 				if desiredState.Proxy == "true" {
-					fmt.Printf("[%v] Ingress %v.%v - Enabling proxying for dns record %v (A)...\n", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname)
+					log.Info().Msgf("[%v] Ingress %v.%v - Enabling proxying for dns record %v (A)...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname)
 				} else {
-					fmt.Printf("[%v] Ingress %v.%v - Disabling proxying for dns record %v (A)...\n", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname)
+					log.Info().Msgf("[%v] Ingress %v.%v - Disabling proxying for dns record %v (A)...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname)
 				}
 
 				_, err := cf.UpdateProxySetting(hostname, desiredState.Proxy)
@@ -550,7 +553,7 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 			// if use origin is disabled, remove the A record for the origin, if state still has a value for OriginRecordHostname
 			if desiredState.OriginRecordHostname != "" && (desiredState.UseOriginRecord != "true" || desiredState.OriginRecordHostname == "") {
 
-				fmt.Printf("[%v] Ingress %v.%v - Deleting origin dns record %v (A)...\n", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, desiredState.OriginRecordHostname)
+				log.Info().Msgf("[%v] Ingress %v.%v - Deleting origin dns record %v (A)...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, desiredState.OriginRecordHostname)
 
 				_, err := cf.DeleteDNSRecord(desiredState.OriginRecordHostname)
 				if err != nil {
@@ -562,7 +565,7 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 			// if any state property changed make sure to update all
 			currentState = desiredState
 
-			fmt.Printf("[%v] Ingress %v.%v - Updating ingress because state has changed...\n", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace)
+			log.Info().Msgf("[%v] Ingress %v.%v - Updating ingress because state has changed...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace)
 
 			// serialize state and store it in the annotation
 			cloudflareStateByteArray, err := json.Marshal(currentState)
@@ -581,7 +584,7 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 
 			status = "succeeded"
 
-			fmt.Printf("[%v] Ingress %v.%v - Ingress has been updated successfully...\n", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace)
+			log.Info().Msgf("[%v] Ingress %v.%v - Ingress has been updated successfully...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace)
 
 			return status, nil
 		}
