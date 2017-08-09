@@ -5,13 +5,15 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"math/rand"
 	"net/http"
 	"os"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ericchiang/k8s"
 	apiv1 "github.com/ericchiang/k8s/api/v1"
@@ -69,16 +71,29 @@ func init() {
 
 func main() {
 
-	fmt.Printf("Starting estafette-cloudflare-dns (version=%v, branch=%v, revision=%v, buildDate=%v, goVersion=%v)\n", version, branch, revision, buildDate, goVersion)
+	// set some default fields added to all logs
+	log := zerolog.New(os.Stdout).With().
+		Timestamp().
+		Str("app", "estafette-cloudflare-dns").
+		Str("version", version).
+		Logger()
+
+	// log startup message
+	log.Info().
+		Str("branch", branch).
+		Str("revision", revision).
+		Str("buildDate", buildDate).
+		Str("goVersion", goVersion).
+		Msg("Starting estafette-cloudflare-dns...")
 
 	// create cloudflare api client
 	cfAPIKey := os.Getenv("CF_API_KEY")
 	if cfAPIKey == "" {
-		log.Fatal("CF_API_KEY is required. Please set CF_API_KEY environment variable to your Cloudflare API key.")
+		log.Fatal().Msg("CF_API_KEY is required. Please set CF_API_KEY environment variable to your Cloudflare API key.")
 	}
 	cfAPIEmail := os.Getenv("CF_API_EMAIL")
 	if cfAPIEmail == "" {
-		log.Fatal("CF_API_EMAIL is required. Please set CF_API_KEY environment variable to your Cloudflare API email.")
+		log.Fatal().Msg("CF_API_EMAIL is required. Please set CF_API_KEY environment variable to your Cloudflare API email.")
 	}
 
 	cf := New(APIAuthentication{Key: cfAPIKey, Email: cfAPIEmail})
@@ -86,14 +101,17 @@ func main() {
 	// create kubernetes api client
 	client, err := k8s.NewInClusterClient()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal().Err(err).Msg("Creating Kubernetes api client failed")
 	}
 
 	// start prometheus
 	go func() {
 		fmt.Println("Serving Prometheus metrics at :9101/metrics...")
 		http.Handle("/metrics", promhttp.Handler())
-		log.Fatal(http.ListenAndServe(*addr, nil))
+
+		if err := http.ListenAndServe(*addr, nil); err != nil {
+			log.Fatal().Err(err).Msg("Starting Prometheus listener failed")
+		}
 	}()
 
 	// watch services for all namespaces
@@ -103,13 +121,13 @@ func main() {
 			fmt.Println("Watching services for all namespaces...")
 			watcher, err := client.CoreV1().WatchServices(context.Background(), k8s.AllNamespaces)
 			if err != nil {
-				log.Println(err)
+				log.Error().Err(err).Msg("WatchServices call failed")
 			} else {
 				// loop indefinitely, unless it errors
 				for {
 					event, service, err := watcher.Next()
 					if err != nil {
-						log.Println(err)
+						log.Error().Err(err)
 						break
 					}
 
@@ -117,7 +135,7 @@ func main() {
 						status, err := processService(cf, client, service, fmt.Sprintf("watcher:%v", *event.Type))
 						dnsRecordsTotals.With(prometheus.Labels{"namespace": *service.Metadata.Namespace, "status": status, "initiator": "watcher", "type": "service"}).Inc()
 						if err != nil {
-							log.Println(err)
+							log.Error().Err(err)
 							continue
 						}
 					}
@@ -138,13 +156,13 @@ func main() {
 			fmt.Println("Watching ingresses for all namespaces...")
 			watcher, err := client.ExtensionsV1Beta1().WatchIngresses(context.Background(), k8s.AllNamespaces)
 			if err != nil {
-				log.Println(err)
+				log.Error().Err(err).Msg("WatchIngresses call failed")
 			} else {
 				// loop indefinitely, unless it errors
 				for {
 					event, ingress, err := watcher.Next()
 					if err != nil {
-						log.Println(err)
+						log.Error().Err(err)
 						break
 					}
 
@@ -152,7 +170,7 @@ func main() {
 						status, err := processIngress(cf, client, ingress, fmt.Sprintf("watcher:%v", *event.Type))
 						dnsRecordsTotals.With(prometheus.Labels{"namespace": *ingress.Metadata.Namespace, "status": status, "initiator": "watcher", "type": "ingress"}).Inc()
 						if err != nil {
-							log.Println(err)
+							log.Error().Err(err)
 							continue
 						}
 					}
@@ -173,7 +191,7 @@ func main() {
 		fmt.Println("Listing services for all namespaces...")
 		services, err := client.CoreV1().ListServices(context.Background(), k8s.AllNamespaces)
 		if err != nil {
-			log.Println(err)
+			log.Error().Err(err).Msg("ListServices call failed")
 		}
 		fmt.Printf("Cluster has %v services\n", len(services.Items))
 
@@ -184,7 +202,7 @@ func main() {
 				status, err := processService(cf, client, service, "poller")
 				dnsRecordsTotals.With(prometheus.Labels{"namespace": *service.Metadata.Namespace, "status": status, "initiator": "poller", "type": "service"}).Inc()
 				if err != nil {
-					log.Println(err)
+					log.Error().Err(err)
 					continue
 				}
 			}
@@ -194,7 +212,7 @@ func main() {
 		fmt.Println("Listing ingresses for all namespaces...")
 		ingresses, err := client.ExtensionsV1Beta1().ListIngresses(context.Background(), k8s.AllNamespaces)
 		if err != nil {
-			log.Println(err)
+			log.Error().Err(err).Msg("ListIngresses call failed")
 		}
 		fmt.Printf("Cluster has %v ingresses\n", len(ingresses.Items))
 
@@ -205,7 +223,7 @@ func main() {
 				status, err := processIngress(cf, client, ingress, "poller")
 				dnsRecordsTotals.With(prometheus.Labels{"namespace": *ingress.Metadata.Namespace, "status": status, "initiator": "poller", "type": "ingress"}).Inc()
 				if err != nil {
-					log.Println(err)
+					log.Error().Err(err)
 					continue
 				}
 			}
@@ -301,7 +319,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 
 				_, err := cf.UpsertDNSRecord("A", desiredState.OriginRecordHostname, desiredState.IPAddress)
 				if err != nil {
-					log.Println(err)
+					log.Error().Err(err)
 					return status, err
 				}
 			}
@@ -317,7 +335,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 
 					_, err := cf.UpsertDNSRecord("CNAME", hostname, desiredState.OriginRecordHostname)
 					if err != nil {
-						log.Println(err)
+						log.Error().Err(err)
 						return status, err
 					}
 				} else {
@@ -326,7 +344,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 
 					_, err := cf.UpsertDNSRecord("A", hostname, desiredState.IPAddress)
 					if err != nil {
-						log.Println(err)
+						log.Error().Err(err)
 						return status, err
 					}
 				}
@@ -340,7 +358,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 
 				_, err := cf.UpdateProxySetting(hostname, desiredState.Proxy)
 				if err != nil {
-					log.Println(err)
+					log.Error().Err(err)
 					return status, err
 				}
 			}
@@ -352,7 +370,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 
 				_, err := cf.DeleteDNSRecord(desiredState.OriginRecordHostname)
 				if err != nil {
-					log.Println(err)
+					log.Error().Err(err)
 					return status, err
 				}
 			}
@@ -365,7 +383,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 			// serialize state and store it in the annotation
 			cloudflareStateByteArray, err := json.Marshal(currentState)
 			if err != nil {
-				log.Println(err)
+				log.Error().Err(err)
 				return status, err
 			}
 			service.Metadata.Annotations[annotationCloudflareState] = string(cloudflareStateByteArray)
@@ -373,7 +391,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 			// update service, because the state annotations have changed
 			service, err = client.CoreV1().UpdateService(context.Background(), service)
 			if err != nil {
-				log.Println(err)
+				log.Error().Err(err)
 				return status, err
 			}
 
@@ -485,7 +503,7 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 
 				_, err := cf.UpsertDNSRecord("A", desiredState.OriginRecordHostname, desiredState.IPAddress)
 				if err != nil {
-					log.Println(err)
+					log.Error().Err(err)
 					return status, err
 				}
 			}
@@ -501,7 +519,7 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 
 					_, err := cf.UpsertDNSRecord("CNAME", hostname, desiredState.OriginRecordHostname)
 					if err != nil {
-						log.Println(err)
+						log.Error().Err(err)
 						return status, err
 					}
 				} else {
@@ -510,7 +528,7 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 
 					_, err := cf.UpsertDNSRecord("A", hostname, desiredState.IPAddress)
 					if err != nil {
-						log.Println(err)
+						log.Error().Err(err)
 						return status, err
 					}
 				}
@@ -524,7 +542,7 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 
 				_, err := cf.UpdateProxySetting(hostname, desiredState.Proxy)
 				if err != nil {
-					log.Println(err)
+					log.Error().Err(err)
 					return status, err
 				}
 			}
@@ -536,7 +554,7 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 
 				_, err := cf.DeleteDNSRecord(desiredState.OriginRecordHostname)
 				if err != nil {
-					log.Println(err)
+					log.Error().Err(err)
 					return status, err
 				}
 			}
@@ -549,7 +567,7 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 			// serialize state and store it in the annotation
 			cloudflareStateByteArray, err := json.Marshal(currentState)
 			if err != nil {
-				log.Println(err)
+				log.Error().Err(err)
 				return status, err
 			}
 			ingress.Metadata.Annotations[annotationCloudflareState] = string(cloudflareStateByteArray)
@@ -557,7 +575,7 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 			// update ingress, because the state annotations have changed
 			ingress, err = client.ExtensionsV1Beta1().UpdateIngress(context.Background(), ingress)
 			if err != nil {
-				log.Println(err)
+				log.Error().Err(err)
 				return status, err
 			}
 
