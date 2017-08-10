@@ -71,6 +71,9 @@ func init() {
 
 func main() {
 
+	// parse command line parameters
+	flag.Parse()
+
 	// set some default fields added to all logs
 	log := zerolog.New(os.Stdout).With().
 		Timestamp().
