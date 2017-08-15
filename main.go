@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	stdlog "log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -78,11 +79,15 @@ func main() {
 	zerolog.LevelFieldName = "severity"
 
 	// set some default fields added to all logs
-	log := zerolog.New(os.Stdout).With().
+	log.Logger = zerolog.New(os.Stdout).With().
 		Timestamp().
 		Str("app", "estafette-cloudflare-dns").
 		Str("version", version).
 		Logger()
+
+	// use zerolog for any logs sent via standard log library
+	stdlog.SetFlags(0)
+	stdlog.SetOutput(log.Logger)
 
 	// log startup message
 	log.Info().
