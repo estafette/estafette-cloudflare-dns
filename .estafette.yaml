@@ -25,7 +25,8 @@ pipelines:
     - docker push estafette/${ESTAFETTE_LABEL_APP}:${ESTAFETTE_BUILD_VERSION}
     when:
       status == 'succeeded' &&
-      branch == 'master'
+      branch == 'master' &&
+      server == 'gocd'
 
   slack-notify:
     image: golang:1.8.3-alpine3.6
