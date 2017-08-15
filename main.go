@@ -9,8 +9,11 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"os/signal"
 	"runtime"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -128,8 +131,13 @@ func main() {
 		}
 	}()
 
+	// define channel and wait group to gracefully shutdown the application
+	gracefulShutdown := make(chan os.Signal)
+	signal.Notify(gracefulShutdown, syscall.SIGTERM, syscall.SIGINT)
+	waitGroup := &sync.WaitGroup{}
+
 	// watch services for all namespaces
-	go func() {
+	go func(waitGroup *sync.WaitGroup) {
 		// loop indefinitely
 		for {
 			log.Info().Msg("Watching services for all namespaces...")
@@ -146,8 +154,11 @@ func main() {
 					}
 
 					if *event.Type == k8s.EventAdded || *event.Type == k8s.EventModified {
+						waitGroup.Add(1)
 						status, err := processService(cf, client, service, fmt.Sprintf("watcher:%v", *event.Type))
 						dnsRecordsTotals.With(prometheus.Labels{"namespace": *service.Metadata.Namespace, "status": status, "initiator": "watcher", "type": "service"}).Inc()
+						waitGroup.Done()
+
 						if err != nil {
 							log.Error().Err(err)
 							continue
@@ -161,10 +172,10 @@ func main() {
 			log.Info().Msgf("Sleeping for %v seconds...", sleepTime)
 			time.Sleep(time.Duration(sleepTime) * time.Second)
 		}
-	}()
+	}(waitGroup)
 
 	// watch ingresses for all namespaces
-	go func() {
+	go func(waitGroup *sync.WaitGroup) {
 		// loop indefinitely
 		for {
 			log.Info().Msg("Watching ingresses for all namespaces...")
@@ -181,8 +192,11 @@ func main() {
 					}
 
 					if *event.Type == k8s.EventAdded || *event.Type == k8s.EventModified {
+						waitGroup.Add(1)
 						status, err := processIngress(cf, client, ingress, fmt.Sprintf("watcher:%v", *event.Type))
 						dnsRecordsTotals.With(prometheus.Labels{"namespace": *ingress.Metadata.Namespace, "status": status, "initiator": "watcher", "type": "ingress"}).Inc()
+						waitGroup.Done()
+
 						if err != nil {
 							log.Error().Err(err)
 							continue
@@ -196,58 +210,74 @@ func main() {
 			log.Info().Msgf("Sleeping for %v seconds...", sleepTime)
 			time.Sleep(time.Duration(sleepTime) * time.Second)
 		}
-	}()
+	}(waitGroup)
 
-	// loop indefinitely
-	for {
+	go func(waitGroup *sync.WaitGroup) {
+		// loop indefinitely
+		for {
 
-		// get services for all namespaces
-		log.Info().Msg("Listing services for all namespaces...")
-		services, err := client.CoreV1().ListServices(context.Background(), k8s.AllNamespaces)
-		if err != nil {
-			log.Error().Err(err).Msg("ListServices call failed")
-		}
-		log.Info().Msgf("Cluster has %v services", len(services.Items))
+			// get services for all namespaces
+			log.Info().Msg("Listing services for all namespaces...")
+			services, err := client.CoreV1().ListServices(context.Background(), k8s.AllNamespaces)
+			if err != nil {
+				log.Error().Err(err).Msg("ListServices call failed")
+			}
+			log.Info().Msgf("Cluster has %v services", len(services.Items))
 
-		// loop all services
-		if services != nil && services.Items != nil {
-			for _, service := range services.Items {
+			// loop all services
+			if services != nil && services.Items != nil {
+				for _, service := range services.Items {
 
-				status, err := processService(cf, client, service, "poller")
-				dnsRecordsTotals.With(prometheus.Labels{"namespace": *service.Metadata.Namespace, "status": status, "initiator": "poller", "type": "service"}).Inc()
-				if err != nil {
-					log.Error().Err(err)
-					continue
+					waitGroup.Add(1)
+					status, err := processService(cf, client, service, "poller")
+					dnsRecordsTotals.With(prometheus.Labels{"namespace": *service.Metadata.Namespace, "status": status, "initiator": "poller", "type": "service"}).Inc()
+					waitGroup.Done()
+
+					if err != nil {
+						log.Error().Err(err)
+						continue
+					}
 				}
 			}
-		}
 
-		// get ingresses for all namespaces
-		log.Info().Msg("Listing ingresses for all namespaces...")
-		ingresses, err := client.ExtensionsV1Beta1().ListIngresses(context.Background(), k8s.AllNamespaces)
-		if err != nil {
-			log.Error().Err(err).Msg("ListIngresses call failed")
-		}
-		log.Info().Msgf("Cluster has %v ingresses", len(ingresses.Items))
+			// get ingresses for all namespaces
+			log.Info().Msg("Listing ingresses for all namespaces...")
+			ingresses, err := client.ExtensionsV1Beta1().ListIngresses(context.Background(), k8s.AllNamespaces)
+			if err != nil {
+				log.Error().Err(err).Msg("ListIngresses call failed")
+			}
+			log.Info().Msgf("Cluster has %v ingresses", len(ingresses.Items))
 
-		// loop all ingresses
-		if ingresses != nil && ingresses.Items != nil {
-			for _, ingress := range ingresses.Items {
+			// loop all ingresses
+			if ingresses != nil && ingresses.Items != nil {
+				for _, ingress := range ingresses.Items {
 
-				status, err := processIngress(cf, client, ingress, "poller")
-				dnsRecordsTotals.With(prometheus.Labels{"namespace": *ingress.Metadata.Namespace, "status": status, "initiator": "poller", "type": "ingress"}).Inc()
-				if err != nil {
-					log.Error().Err(err)
-					continue
+					waitGroup.Add(1)
+					status, err := processIngress(cf, client, ingress, "poller")
+					dnsRecordsTotals.With(prometheus.Labels{"namespace": *ingress.Metadata.Namespace, "status": status, "initiator": "poller", "type": "ingress"}).Inc()
+					waitGroup.Done()
+
+					if err != nil {
+						log.Error().Err(err)
+						continue
+					}
 				}
 			}
-		}
 
-		// sleep random time around 900 seconds
-		sleepTime := applyJitter(900)
-		log.Info().Msgf("Sleeping for %v seconds...", sleepTime)
-		time.Sleep(time.Duration(sleepTime) * time.Second)
-	}
+			// sleep random time around 900 seconds
+			sleepTime := applyJitter(900)
+			log.Info().Msgf("Sleeping for %v seconds...", sleepTime)
+			time.Sleep(time.Duration(sleepTime) * time.Second)
+		}
+	}(waitGroup)
+
+	signalReceived := <-gracefulShutdown
+	log.Info().
+		Msgf("Received signal %v. Waiting on running tasks to finish...", signalReceived)
+
+	waitGroup.Wait()
+
+	log.Info().Msg("Shutting down...")
 }
 
 func applyJitter(input int) (output int) {
