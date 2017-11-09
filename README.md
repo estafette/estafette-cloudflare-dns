@@ -10,13 +10,27 @@ In order not to have to set dns records manually or from deployment scripts this
 
 ## Usage
 
-First deploy this application to your Kubernetes cluster using the following manifest. Make sure to pass an email address and cloudflare api key.
+Since Kubernetes 1.8, RBAC is enabled by default. You first need to deploy the RBAC role and binding:
+
+```
+$ kubectl apply -f ./rbac.yaml
+```
+
+Then deploy the _estafette-cloudflare-dns_ application to your Kubernetes cluster using the following manifest. Make sure to pass an email address and cloudflare api key.
 
 ```yaml
 apiVersion: v1
 kind: Namespace
 metadata:
   name: estafette
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: estafette-cloudflare-dns
+  namespace: estafette
+  labels:
+    app: estafette-cloudflare-dns
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment
@@ -37,6 +51,7 @@ spec:
       labels:
         app: estafette-cloudflare-dns
     spec:
+      serviceAccount: estafette-cloudflare-dns
       containers:
       - name: estafette-cloudflare-dns
         image: estafette/estafette-cloudflare-dns:latest
