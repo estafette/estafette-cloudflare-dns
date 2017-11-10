@@ -1,4 +1,4 @@
-name: chart
+name: estafette-cloudflare-dns
 version: 1.0.103
 description: A Kubernetes controller to configure Cloudflare dns records for annotated services and ingresses
 home: https://estafette.io/
