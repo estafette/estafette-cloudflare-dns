@@ -15,8 +15,7 @@ Deploy with Helm:
 ```
 brew install kubernetes-helm
 helm init --history-max 25 --upgrade
-lint helm chart with helm lint chart/estafette-cloudflare-dns
-chart helm package chart/estafette-cloudflare-dns --version 1.0.103
+helm package chart/estafette-cloudflare-dns --version 1.0.103
 helm upgrade estafette-cloudflare-dns estafette-cloudflare-dns-1.0.103.tgz --namespace estafette --install --dry-run --debug --set cloudflareApiEmail=*** --set cloudflareApiKey=*** --set rbac.create=true
 ```
 
