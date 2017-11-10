@@ -1,0 +1,50 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    {{- if (.Values.teamName) }}
+    team: {{ .Values.teamName }}
+    {{- end}}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      app: {{ template "fullname" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        {{- if (.Values.teamName) }}
+        team: {{ .Values.teamName }}
+        {{- end}}
+        version: {{ .Chart.Version | replace "+" "_" }}-{{ .Release.Revision }}
+      annotations:
+        prometheus.io/scrape: {{ .Values.prometheusScrape | quote }}
+        prometheus.io/port: {{ .Values.prometheusPort | quote }}
+    spec:
+      serviceAccount: {{ template "fullname" . }}
+      containers:
+      - name: {{ template "fullname" . }}
+        image: {{ .Values.image.repository }}:{{ .Chart.Version }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: "CF_API_EMAIL"
+          value: {{ .Values.cloudflareApiEmail | quote }}
+        - name: "CF_API_KEY"
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "fullname" . }}
+              key: cloudflareApiKey
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.livenessProbe.path }}
+            port: {{ .Values.prometheusPort }}
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}

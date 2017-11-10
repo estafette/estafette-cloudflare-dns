@@ -1,0 +1,29 @@
+
+image:
+  repository: estafette/estafette-cloudflare-dns
+  pullPolicy: IfNotPresent
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+rbac:
+  # If true, create & use RBAC resources
+  create: false
+
+revisionHistoryLimit: 10
+
+prometheusScrape: true
+prometheusPort: 9101
+
+cloudflareApiKey: ABC
+cloudflareApiEmail: a@server.com
+
+livenessProbe:
+  path: /metrics
+  initialDelaySeconds: 30
+  timeoutSeconds: 1
