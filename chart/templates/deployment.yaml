@@ -4,9 +4,9 @@ metadata:
   name: {{ template "fullname" . }}
   labels:
     app: {{ template "fullname" . }}
-    {{- if (.Values.teamName) }}
-    team: {{ .Values.teamName }}
-    {{- end}}
+    {{- if .Values.extraLabels }}
+{{ toYaml .Values.extraLabels | indent 4 }}
+    {{- end }}
 spec:
   replicas: 1
   strategy:
@@ -19,13 +19,14 @@ spec:
     metadata:
       labels:
         app: {{ template "fullname" . }}
-        {{- if (.Values.teamName) }}
-        team: {{ .Values.teamName }}
-        {{- end}}
         version: {{ .Chart.Version | replace "+" "_" }}-{{ .Release.Revision }}
+        {{- if .Values.extraLabels }}
+{{ toYaml .Values.extraLabels | indent 8 }}
+        {{- end }}
+      {{- if .Values.podAnnotations }}
       annotations:
-        prometheus.io/scrape: {{ .Values.prometheusScrape | quote }}
-        prometheus.io/port: {{ .Values.prometheusPort | quote }}
+{{ toYaml .Values.podAnnotations | indent 8 }}
+      {{- end }}
     spec:
       serviceAccount: {{ template "fullname" . }}
       containers:
@@ -45,6 +46,6 @@ spec:
         livenessProbe:
           httpGet:
             path: {{ .Values.livenessProbe.path }}
-            port: {{ .Values.prometheusPort }}
+            port: {{ .Values.livenessProbe.port }}
           initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
           timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
