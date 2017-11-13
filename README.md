@@ -36,12 +36,10 @@ export MEMORY_LIMIT=128Mi
 
 
 # Setup RBAC
-curl https://raw.githubusercontent.com/estafette/estafette-cloudflare-dns/master/rbac.yaml -o rbac.yaml
-cat rbac.yaml | envsubst | kubectl apply -n ${NAMESPACE} -f -
+curl https://raw.githubusercontent.com/estafette/estafette-cloudflare-dns/master/rbac.yaml | envsubst | kubectl apply -n ${NAMESPACE} -f -
 
 # Install application
-curl https://raw.githubusercontent.com/estafette/estafette-cloudflare-dns/master/kubernetes.yaml -o kubernetes.yaml
-cat kubernetes.yaml | envsubst | kubectl apply -n ${NAMESPACE} -f -
+curl https://raw.githubusercontent.com/estafette/estafette-cloudflare-dns/master/kubernetes.yaml | envsubst | kubectl apply -n ${NAMESPACE} -f -
 ```
 
 Once it's running put the following annotations on a service of type LoadBalancer and deploy. The estafette-cloudflare-dns application will watch changes to services and process those. Once approximately every 300 seconds it also scans all services as a safety net.
