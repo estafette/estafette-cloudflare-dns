@@ -22,8 +22,6 @@ helm upgrade estafette-cloudflare-dns estafette-cloudflare-dns-1.0.103.tgz --nam
 Or deploy without Helm:
 
 ```
-curl https://raw.githubusercontent.com/estafette/estafette-cloudflare-dns/master/kubernetes.yaml -o kubernetes.yaml
-
 export NAMESPACE=estafette
 export APP_NAME=estafette-cloudflare-dns
 export TEAM_NAME=tooling
@@ -36,6 +34,13 @@ export MEMORY_REQUEST=15Mi
 export CPU_LIMIT=50m
 export MEMORY_LIMIT=128Mi
 
+
+# Setup RBAC
+curl https://raw.githubusercontent.com/estafette/estafette-cloudflare-dns/master/rbac.yaml -o rbac.yaml
+cat rbac.yaml | envsubst | kubectl apply -n ${NAMESPACE} -f -
+
+# Install application
+curl https://raw.githubusercontent.com/estafette/estafette-cloudflare-dns/master/kubernetes.yaml -o kubernetes.yaml
 cat kubernetes.yaml | envsubst | kubectl apply -n ${NAMESPACE} -f -
 ```
 
