@@ -10,54 +10,36 @@ In order not to have to set dns records manually or from deployment scripts this
 
 ## Usage
 
-First deploy this application to your Kubernetes cluster using the following manifest. Make sure to pass an email address and cloudflare api key.
+Deploy with Helm:
 
-```yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: estafette
----
-apiVersion: extensions/v1beta1
-kind: Deployment
-metadata:
-  name: estafette-cloudflare-dns
-  namespace: estafette
-  labels:
-    app: estafette-cloudflare-dns
-spec:
-  replicas: 1
-  strategy:
-    type: Recreate
-  selector:
-    matchLabels:
-      app: estafette-cloudflare-dns
-  template:
-    metadata:
-      labels:
-        app: estafette-cloudflare-dns
-    spec:
-      containers:
-      - name: estafette-cloudflare-dns
-        image: estafette/estafette-cloudflare-dns:latest
-        env:
-        - name: "CF_API_EMAIL"
-          value: "myemail@mydomain.com"
-        - name: "CF_API_KEY"
-          value: "****"
-        resources:
-          requests:
-            cpu: 10m
-            memory: 16Mi
-          limits:
-            cpu: 50m
-            memory: 128Mi
-        livenessProbe:
-          httpGet:
-            path: /metrics
-            port: 9101
-          initialDelaySeconds: 30
-          timeoutSeconds: 1
+```
+brew install kubernetes-helm
+helm init --history-max 25 --upgrade
+helm package chart/estafette-cloudflare-dns --version 1.0.103
+helm upgrade estafette-cloudflare-dns estafette-cloudflare-dns-1.0.103.tgz --namespace estafette --install --dry-run --debug --set cloudflareApiEmail=*** --set cloudflareApiKey=*** --set rbac.create=true
+```
+
+Or deploy without Helm:
+
+```
+export NAMESPACE=estafette
+export APP_NAME=estafette-cloudflare-dns
+export TEAM_NAME=tooling
+export VERSION=1.0.103
+export GO_PIPELINE_LABEL=1.0.103
+export CF_API_EMAIL=***
+export CF_API_KEY=***
+export CPU_REQUEST=10m
+export MEMORY_REQUEST=15Mi
+export CPU_LIMIT=50m
+export MEMORY_LIMIT=128Mi
+
+
+# Setup RBAC
+curl https://raw.githubusercontent.com/estafette/estafette-cloudflare-dns/master/rbac.yaml | envsubst | kubectl apply -n ${NAMESPACE} -f -
+
+# Install application
+curl https://raw.githubusercontent.com/estafette/estafette-cloudflare-dns/master/kubernetes.yaml | envsubst | kubectl apply -n ${NAMESPACE} -f -
 ```
 
 Once it's running put the following annotations on a service of type LoadBalancer and deploy. The estafette-cloudflare-dns application will watch changes to services and process those. Once approximately every 300 seconds it also scans all services as a safety net.
