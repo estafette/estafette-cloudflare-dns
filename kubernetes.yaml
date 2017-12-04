@@ -39,6 +39,16 @@ spec:
         prometheus.io/port: "9101"
     spec:
       serviceAccount: ${APP_NAME}
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 10
+            preference:
+              matchExpressions:
+              - key: cloud.google.com/gke-preemptible
+                operator: In
+                values:
+                - "true"
       containers:
       - name: ${APP_NAME}
         image: estafette/estafette-cloudflare-dns:${GO_PIPELINE_LABEL}
