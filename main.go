@@ -28,6 +28,7 @@ import (
 
 const annotationCloudflareDNS string = "estafette.io/cloudflare-dns"
 const annotationCloudflareHostnames string = "estafette.io/cloudflare-hostnames"
+const annotationCloudflareInternalHostnames string = "estafette.io/cloudflare-internal-hostnames"
 const annotationCloudflareProxy string = "estafette.io/cloudflare-proxy"
 const annotationCloudflareUseOriginRecord string = "estafette.io/cloudflare-use-origin-record"
 const annotationCloudflareOriginRecordHostname string = "estafette.io/cloudflare-origin-record-hostname"
@@ -38,10 +39,12 @@ const annotationCloudflareState string = "estafette.io/cloudflare-state"
 type CloudflareState struct {
 	Enabled              string `json:"enabled"`
 	Hostnames            string `json:"hostnames"`
+	InternalHostnames    string `json:"internalHostnames,omitempty"`
 	Proxy                string `json:"proxy"`
 	UseOriginRecord      string `json:"useOriginRecord"`
 	OriginRecordHostname string `json:"originRecordHostname"`
 	IPAddress            string `json:"ipAddress"`
+	InternalIPAddress    string `json:"internalIpAddress,omitempty"`
 }
 
 var (
@@ -299,6 +302,10 @@ func getDesiredServiceState(service *apiv1.Service) (state CloudflareState) {
 	if !ok {
 		state.Hostnames = ""
 	}
+	state.InternalHostnames, ok = service.Metadata.Annotations[annotationCloudflareInternalHostnames]
+	if !ok {
+		state.InternalHostnames = ""
+	}
 	state.Proxy, ok = service.Metadata.Annotations[annotationCloudflareProxy]
 	if !ok {
 		state.Proxy = "true"
@@ -314,6 +321,9 @@ func getDesiredServiceState(service *apiv1.Service) (state CloudflareState) {
 
 	if *service.Spec.Type == "LoadBalancer" && len(service.Status.LoadBalancer.Ingress) > 0 {
 		state.IPAddress = *service.Status.LoadBalancer.Ingress[0].Ip
+	}
+	if *service.Spec.ClusterIP != "" {
+		state.InternalIPAddress = *service.Spec.ClusterIP
 	}
 
 	return
@@ -342,6 +352,7 @@ func getCurrentServiceState(service *apiv1.Service) (state CloudflareState) {
 func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, initiator string, desiredState, currentState CloudflareState) (status string, err error) {
 
 	status = "failed"
+	hasChanges := false
 
 	// check if service has estafette.io/cloudflare-dns annotation and it's value is true and
 	// check if service has estafette.io/cloudflare-hostnames annotation and it's value is not empty and
@@ -355,6 +366,8 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 			desiredState.Proxy != currentState.Proxy ||
 			desiredState.UseOriginRecord != currentState.UseOriginRecord ||
 			desiredState.OriginRecordHostname != currentState.OriginRecordHostname {
+
+			hasChanges = true
 
 			// if use origin is enabled, create an A record for the origin
 			if desiredState.UseOriginRecord == "true" && desiredState.OriginRecordHostname != "" {
@@ -418,33 +431,62 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 					return status, err
 				}
 			}
-
-			// if any state property changed make sure to update all
-			currentState = desiredState
-
-			log.Info().Msgf("[%v] Service %v.%v - Updating service because state has changed...", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
-
-			// serialize state and store it in the annotation
-			cloudflareStateByteArray, err := json.Marshal(currentState)
-			if err != nil {
-				log.Error().Err(err)
-				return status, err
-			}
-			service.Metadata.Annotations[annotationCloudflareState] = string(cloudflareStateByteArray)
-
-			// update service, because the state annotations have changed
-			service, err = client.CoreV1().UpdateService(context.Background(), service)
-			if err != nil {
-				log.Error().Err(err)
-				return status, err
-			}
-
-			status = "succeeded"
-
-			log.Info().Msgf("[%v] Service %v.%v - Service has been updated successfully...", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
-
-			return status, nil
 		}
+	}
+
+	// check if service has estafette.io/cloudflare-dns annotation and it's value is true and
+	// check if service has estafette.io/cloudflare-internal-hostnames annotation and it's value is not empty and
+	// check if service has an internal ip address
+	if desiredState.Enabled == "true" && len(desiredState.InternalHostnames) > 0 && desiredState.InternalIPAddress != "" {
+
+		// update internal dns record if anything has changed compared to the stored state
+		if desiredState.InternalIPAddress != currentState.InternalIPAddress ||
+			desiredState.InternalHostnames != currentState.InternalHostnames {
+
+			hasChanges = true
+
+			// loop all internal hostnames
+			internalHostnames := strings.Split(desiredState.InternalHostnames, ",")
+			for _, internalHostname := range internalHostnames {
+
+				log.Info().Msgf("[%v] Service %v.%v - Upserting dns record %v (A) to internal ip address %v...", initiator, *service.Metadata.Name, *service.Metadata.Namespace, internalHostname, desiredState.InternalIPAddress)
+
+				_, err := cf.UpsertDNSRecord("A", internalHostname, desiredState.InternalIPAddress)
+				if err != nil {
+					log.Error().Err(err)
+					return status, err
+				}
+			}
+		}
+	}
+
+	if hasChanges {
+
+		// if any state property changed make sure to update all
+		currentState = desiredState
+
+		log.Info().Msgf("[%v] Service %v.%v - Updating service because state has changed...", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
+
+		// serialize state and store it in the annotation
+		cloudflareStateByteArray, err := json.Marshal(currentState)
+		if err != nil {
+			log.Error().Err(err)
+			return status, err
+		}
+		service.Metadata.Annotations[annotationCloudflareState] = string(cloudflareStateByteArray)
+
+		// update service, because the state annotations have changed
+		service, err = client.CoreV1().UpdateService(context.Background(), service)
+		if err != nil {
+			log.Error().Err(err)
+			return status, err
+		}
+
+		status = "succeeded"
+
+		log.Info().Msgf("[%v] Service %v.%v - Service has been updated successfully...", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
+
+		return status, nil
 	}
 
 	status = "skipped"
