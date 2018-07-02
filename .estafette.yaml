@@ -3,6 +3,7 @@ builder:
 
 labels:
   app: estafette-cloudflare-dns
+  app-group: estafette-various
   team: estafette-team
   language: golang
 
