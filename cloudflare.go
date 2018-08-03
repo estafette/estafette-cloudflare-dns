@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/rs/zerolog/log"
 )
 
 // Cloudflare is the object to perform Cloudflare api calls with
@@ -317,11 +319,15 @@ func (cf *Cloudflare) UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordCon
 		return r, err
 	}
 
+	log.Debug().Msgf("Retrieved zone for %v: %v", dnsRecordName, zone.ID)
+
 	// get dns record
 	dnsRecordsResult, err := cf.getDNSRecordsByZoneAndName(zone, dnsRecordName)
 	if err != nil {
 		return r, err
 	}
+
+	log.Debug().Msgf("Retrieved %v dns record(s) for %v: %v", dnsRecordsResult.ResultInfo.Count, dnsRecordName, dnsRecordsResult)
 
 	if dnsRecordsResult.ResultInfo.Count > 1 {
 		err = errors.New("Cannot upsert, there's more than 1 record by that name")
