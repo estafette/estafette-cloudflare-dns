@@ -39,7 +39,7 @@ func (cf *Cloudflare) getZonesByName(zoneName string) (r zonesResult, err error)
 	json.NewDecoder(bytes.NewReader(body)).Decode(&r)
 
 	if !r.Success {
-		err = errors.New("cloudflare: listing zones failed")
+		err = fmt.Errorf("Listing cloudflare zones failed | %v | %v", r.Errors, r.Messages)
 		return
 	}
 
@@ -115,7 +115,7 @@ func (cf *Cloudflare) getDNSRecordsByZoneAndName(zone Zone, dnsRecordName string
 	json.NewDecoder(bytes.NewReader(body)).Decode(&r)
 
 	if !r.Success {
-		err = errors.New("Listing dns record failed")
+		err = fmt.Errorf("Listing cloudflare dns records failed | %v | %v", r.Errors, r.Messages)
 		return
 	}
 
@@ -162,7 +162,7 @@ func (cf *Cloudflare) createDNSRecordByZone(zone Zone, dnsRecordType, dnsRecordN
 	json.NewDecoder(bytes.NewReader(body)).Decode(&r)
 
 	if !r.Success {
-		err = errors.New(fmt.Sprintf("cloudflare: creating dns record failed: %v", r.Errors))
+		err = fmt.Errorf("Creating cloudflare dns record failed | %v | %v", r.Errors, r.Messages)
 		return
 	}
 
@@ -202,7 +202,7 @@ func (cf *Cloudflare) deleteDNSRecordByDNSRecord(dnsRecord DNSRecord) (r deleteR
 	json.NewDecoder(bytes.NewReader(body)).Decode(&r)
 
 	if !r.Success {
-		err = fmt.Errorf("cloudflare: deleting dns record failed | %v | %v", r.Errors, r.Messages)
+		err = fmt.Errorf("Deleting cloudflare dns record failed | %v | %v", r.Errors, r.Messages)
 		return
 	}
 
@@ -265,7 +265,7 @@ func (cf *Cloudflare) updateDNSRecordByDNSRecord(dnsRecord DNSRecord, dnsRecordT
 	json.NewDecoder(bytes.NewReader(body)).Decode(&r)
 
 	if !r.Success {
-		err = errors.New("cloudflare: update dns record failed")
+		err = fmt.Errorf("Updating cloudflare dns record failed | %v | %v", r.Errors, r.Messages)
 		return
 	}
 
@@ -421,7 +421,7 @@ func (cf *Cloudflare) UpdateProxySetting(dnsRecordName, proxy string) (r DNSReco
 			json.NewDecoder(bytes.NewReader(body)).Decode(&ur)
 
 			if !ur.Success {
-				err = errors.New("cloudflare: update dns record failed")
+				err = fmt.Errorf("Updating cloudflare dns record failed | %v | %v", ur.Errors, ur.Messages)
 				return
 			}
 		}
