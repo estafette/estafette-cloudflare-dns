@@ -162,7 +162,7 @@ func (cf *Cloudflare) createDNSRecordByZone(zone Zone, dnsRecordType, dnsRecordN
 	json.NewDecoder(bytes.NewReader(body)).Decode(&r)
 
 	if !r.Success {
-		err = errors.New("cloudflare: creating dns record failed")
+		err = errors.New(fmt.Sprintf("cloudflare: creating dns record failed: %v", r.Errors))
 		return
 	}
 
