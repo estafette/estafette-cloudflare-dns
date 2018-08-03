@@ -33,7 +33,7 @@ func (cf *Cloudflare) getZonesByName(zoneName string) (r zonesResult, err error)
 	// fetch result from cloudflare api
 	body, err := cf.restClient.Get(findZoneURI, cf.authentication)
 	if err != nil {
-		return
+		return r, err
 	}
 
 	json.NewDecoder(bytes.NewReader(body)).Decode(&r)
@@ -62,13 +62,13 @@ func (cf *Cloudflare) GetZoneByDNSName(dnsName string) (r Zone, err error) {
 	numberOfZoneItems := 2
 	zoneNameParts, err := getLastItemsFromSlice(dnsNameParts, numberOfZoneItems)
 	if err != nil {
-		return
+		return r, err
 	}
 
 	zoneName := strings.Join(zoneNameParts, ".")
 	zonesResult, err := cf.getZonesByName(zoneName)
 	if err != nil {
-		return
+		return r, err
 	}
 
 	// if matching zones results fit in a single page get the fully matching zone from the results, otherwise narrow down the search
@@ -109,7 +109,7 @@ func (cf *Cloudflare) getDNSRecordsByZoneAndName(zone Zone, dnsRecordName string
 	// fetch result from cloudflare api
 	body, err := cf.restClient.Get(findDNSRecordURI, cf.authentication)
 	if err != nil {
-		return
+		return r, err
 	}
 
 	json.NewDecoder(bytes.NewReader(body)).Decode(&r)
@@ -128,13 +128,13 @@ func (cf *Cloudflare) GetDNSRecordByDNSName(dnsName string) (r DNSRecord, err er
 	// get zone
 	zone, err := cf.GetZoneByDNSName(dnsName)
 	if err != nil {
-		return
+		return r, err
 	}
 
 	// get dns record
 	dnsRecordsResult, err := cf.getDNSRecordsByZoneAndName(zone, dnsName)
 	if err != nil {
-		return
+		return r, err
 	}
 
 	if dnsRecordsResult.ResultInfo.Count == 0 {
@@ -156,7 +156,7 @@ func (cf *Cloudflare) createDNSRecordByZone(zone Zone, dnsRecordType, dnsRecordN
 
 	body, err := cf.restClient.Post(createDNSRecordURI, newDNSRecord, cf.authentication)
 	if err != nil {
-		return
+		return r, err
 	}
 
 	json.NewDecoder(bytes.NewReader(body)).Decode(&r)
@@ -175,7 +175,7 @@ func (cf *Cloudflare) CreateDNSRecord(dnsRecordType, dnsRecordName, dnsRecordCon
 	// get zone
 	zone, err := cf.GetZoneByDNSName(dnsRecordName)
 	if err != nil {
-		return
+		return r, err
 	}
 
 	// create record at cloudflare api
@@ -196,7 +196,7 @@ func (cf *Cloudflare) deleteDNSRecordByDNSRecord(dnsRecord DNSRecord) (r deleteR
 	deleteDNSRecordURI := fmt.Sprintf("%v/zones/%v/dns_records/%v", cf.baseURL, dnsRecord.ZoneID, dnsRecord.ID)
 	body, err := cf.restClient.Delete(deleteDNSRecordURI, cf.authentication)
 	if err != nil {
-		return
+		return r, err
 	}
 
 	json.NewDecoder(bytes.NewReader(body)).Decode(&r)
@@ -214,7 +214,7 @@ func (cf *Cloudflare) deleteDNSRecordByZone(zone Zone, dnsRecordName string) (r 
 	// get dns record
 	dnsRecordsResult, err := cf.getDNSRecordsByZoneAndName(zone, dnsRecordName)
 	if err != nil {
-		return
+		return r, err
 	}
 	if dnsRecordsResult.ResultInfo.Count == 0 {
 		err = errors.New("No matching dns record has been found")
@@ -239,7 +239,7 @@ func (cf *Cloudflare) DeleteDNSRecord(dnsRecordName string) (r bool, err error) 
 	// get zone
 	zone, err := cf.GetZoneByDNSName(dnsRecordName)
 	if err != nil {
-		return
+		return r, err
 	}
 
 	return cf.deleteDNSRecordByZone(zone, dnsRecordName)
@@ -259,7 +259,7 @@ func (cf *Cloudflare) updateDNSRecordByDNSRecord(dnsRecord DNSRecord, dnsRecordT
 
 	body, err := cf.restClient.Put(updateDNSRecordURI, dnsRecord, cf.authentication)
 	if err != nil {
-		return
+		return r, err
 	}
 
 	json.NewDecoder(bytes.NewReader(body)).Decode(&r)
@@ -277,7 +277,7 @@ func (cf *Cloudflare) updateDNSRecordByZone(zone Zone, dnsRecordType, dnsRecordN
 	// get dns record
 	dnsRecordsResult, err := cf.getDNSRecordsByZoneAndName(zone, dnsRecordName)
 	if err != nil {
-		return
+		return r, err
 	}
 	if dnsRecordsResult.ResultInfo.Count == 0 {
 		err = errors.New("No matching dns record has been found")
@@ -288,7 +288,7 @@ func (cf *Cloudflare) updateDNSRecordByZone(zone Zone, dnsRecordType, dnsRecordN
 
 	cloudflareDNSRecordsUpdateResult, err := cf.updateDNSRecordByDNSRecord(r, dnsRecordType, dnsRecordContent)
 	if err != nil {
-		return
+		return r, err
 	}
 
 	r = cloudflareDNSRecordsUpdateResult.DNSRecord
@@ -302,7 +302,7 @@ func (cf *Cloudflare) UpdateDNSRecord(dnsRecordType, dnsRecordName, dnsRecordCon
 	// get zone
 	zone, err := cf.GetZoneByDNSName(dnsRecordName)
 	if err != nil {
-		return
+		return r, err
 	}
 
 	return cf.updateDNSRecordByZone(zone, dnsRecordType, dnsRecordName, dnsRecordContent)
@@ -314,13 +314,13 @@ func (cf *Cloudflare) UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordCon
 	// get zone
 	zone, err := cf.GetZoneByDNSName(dnsRecordName)
 	if err != nil {
-		return
+		return r, err
 	}
 
 	// get dns record
 	dnsRecordsResult, err := cf.getDNSRecordsByZoneAndName(zone, dnsRecordName)
 	if err != nil {
-		return
+		return r, err
 	}
 
 	if dnsRecordsResult.ResultInfo.Count > 1 {
@@ -381,13 +381,13 @@ func (cf *Cloudflare) UpdateProxySetting(dnsRecordName, proxy string) (r DNSReco
 	// get zone
 	zone, err := cf.GetZoneByDNSName(dnsRecordName)
 	if err != nil {
-		return
+		return r, err
 	}
 
 	// get dns record
 	dnsRecordsResult, err := cf.getDNSRecordsByZoneAndName(zone, dnsRecordName)
 	if err != nil {
-		return
+		return r, err
 	}
 
 	if dnsRecordsResult.ResultInfo.Count == 0 {
