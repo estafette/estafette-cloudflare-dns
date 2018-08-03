@@ -152,7 +152,7 @@ func main() {
 				for {
 					event, service, err := watcher.Next()
 					if err != nil {
-						log.Error().Err(err)
+						log.Error().Err(err).Msg("Getting next event from service watcher failed")
 						break
 					}
 
@@ -163,7 +163,7 @@ func main() {
 						waitGroup.Done()
 
 						if err != nil {
-							log.Error().Err(err)
+							log.Error().Err(err).Msgf("Processing service %v.%v failed", *service.Metadata.Name, *service.Metadata.Namespace)
 							continue
 						}
 					}
@@ -190,7 +190,7 @@ func main() {
 				for {
 					event, ingress, err := watcher.Next()
 					if err != nil {
-						log.Error().Err(err)
+						log.Error().Err(err).Msg("Getting next event from ingress watcher failed")
 						break
 					}
 
@@ -201,7 +201,7 @@ func main() {
 						waitGroup.Done()
 
 						if err != nil {
-							log.Error().Err(err)
+							log.Error().Err(err).Msgf("Processing ingress %v.%v failed", *ingress.Metadata.Name, *ingress.Metadata.Namespace)
 							continue
 						}
 					}
@@ -237,7 +237,7 @@ func main() {
 					waitGroup.Done()
 
 					if err != nil {
-						log.Error().Err(err)
+						log.Error().Err(err).Msgf("Processing service %v.%v failed", *service.Metadata.Name, *service.Metadata.Namespace)
 						continue
 					}
 				}
@@ -261,7 +261,7 @@ func main() {
 					waitGroup.Done()
 
 					if err != nil {
-						log.Error().Err(err)
+						log.Error().Err(err).Msgf("Processing ingress %v.%v failed", *ingress.Metadata.Name, *ingress.Metadata.Namespace)
 						continue
 					}
 				}
@@ -376,7 +376,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 
 				_, err := cf.UpsertDNSRecord("A", desiredState.OriginRecordHostname, desiredState.IPAddress)
 				if err != nil {
-					log.Error().Err(err)
+					log.Error().Err(err).Msgf("[%v] Service %v.%v - Upserting origin dns record %v (A) to ip address %v failed", initiator, *service.Metadata.Name, *service.Metadata.Namespace, desiredState.OriginRecordHostname, desiredState.IPAddress)
 					return status, err
 				}
 			}
@@ -392,7 +392,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 
 					_, err := cf.UpsertDNSRecord("CNAME", hostname, desiredState.OriginRecordHostname)
 					if err != nil {
-						log.Error().Err(err)
+						log.Error().Err(err).Msgf("[%v] Service %v.%v - Upserting dns record %v (CNAME) to value %v failed", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, desiredState.OriginRecordHostname)
 						return status, err
 					}
 				} else {
@@ -401,7 +401,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 
 					_, err := cf.UpsertDNSRecord("A", hostname, desiredState.IPAddress)
 					if err != nil {
-						log.Error().Err(err)
+						log.Error().Err(err).Msgf("[%v] Service %v.%v - Upserting dns record %v (A) to ip address %v failed", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, desiredState.IPAddress)
 						return status, err
 					}
 				}
@@ -415,7 +415,12 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 
 				_, err := cf.UpdateProxySetting(hostname, desiredState.Proxy)
 				if err != nil {
-					log.Error().Err(err)
+					if desiredState.Proxy == "true" {
+						log.Error().Err(err).Msgf("[%v] Service %v.%v - Enabling proxying for dns record %v (A) failed", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
+					} else {
+						log.Error().Err(err).Msgf("[%v] Service %v.%v - Disabling proxying for dns record %v (A) failed", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
+					}
+
 					return status, err
 				}
 			}
@@ -427,7 +432,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 
 				_, err := cf.DeleteDNSRecord(desiredState.OriginRecordHostname)
 				if err != nil {
-					log.Error().Err(err)
+					log.Error().Err(err).Msgf("[%v] Service %v.%v - Deleting origin dns record %v (A) failed", initiator, *service.Metadata.Name, *service.Metadata.Namespace, desiredState.OriginRecordHostname)
 					return status, err
 				}
 			}
@@ -453,7 +458,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 
 				_, err := cf.UpsertDNSRecord("A", internalHostname, desiredState.InternalIPAddress)
 				if err != nil {
-					log.Error().Err(err)
+					log.Error().Err(err).Msgf("[%v] Service %v.%v - Upserting dns record %v (A) to internal ip address %v failed", initiator, *service.Metadata.Name, *service.Metadata.Namespace, internalHostname, desiredState.InternalIPAddress)
 					return status, err
 				}
 			}
@@ -470,7 +475,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 		// serialize state and store it in the annotation
 		cloudflareStateByteArray, err := json.Marshal(currentState)
 		if err != nil {
-			log.Error().Err(err)
+			log.Error().Err(err).Msgf("[%v] Service %v.%v - Marshalling state failed", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
 			return status, err
 		}
 		service.Metadata.Annotations[annotationCloudflareState] = string(cloudflareStateByteArray)
@@ -478,7 +483,7 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 		// update service, because the state annotations have changed
 		service, err = client.CoreV1().UpdateService(context.Background(), service)
 		if err != nil {
-			log.Error().Err(err)
+			log.Error().Err(err).Msgf("[%v] Service %v.%v - Updating service state has failed", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
 			return status, err
 		}
 
@@ -589,7 +594,7 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 
 				_, err := cf.UpsertDNSRecord("A", desiredState.OriginRecordHostname, desiredState.IPAddress)
 				if err != nil {
-					log.Error().Err(err)
+					log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Upserting origin dns record %v (A) to ip address %v failed", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, desiredState.OriginRecordHostname, desiredState.IPAddress)
 					return status, err
 				}
 			}
@@ -605,7 +610,7 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 
 					_, err := cf.UpsertDNSRecord("CNAME", hostname, desiredState.OriginRecordHostname)
 					if err != nil {
-						log.Error().Err(err)
+						log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Upserting dns record %v (CNAME) to value %v failed", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname, desiredState.OriginRecordHostname)
 						return status, err
 					}
 				} else {
@@ -614,7 +619,7 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 
 					_, err := cf.UpsertDNSRecord("A", hostname, desiredState.IPAddress)
 					if err != nil {
-						log.Error().Err(err)
+						log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Upserting dns record %v (A) to ip address %v failed", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname, desiredState.IPAddress)
 						return status, err
 					}
 				}
@@ -628,7 +633,12 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 
 				_, err := cf.UpdateProxySetting(hostname, desiredState.Proxy)
 				if err != nil {
-					log.Error().Err(err)
+					if desiredState.Proxy == "true" {
+						log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Enabling proxying for dns record %v (A) failed", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname)
+					} else {
+						log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Disabling proxying for dns record %v (A) failed", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname)
+					}
+
 					return status, err
 				}
 			}
@@ -640,7 +650,7 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 
 				_, err := cf.DeleteDNSRecord(desiredState.OriginRecordHostname)
 				if err != nil {
-					log.Error().Err(err)
+					log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Deleting origin dns record %v (A) failed", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, desiredState.OriginRecordHostname)
 					return status, err
 				}
 			}
@@ -653,7 +663,7 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 			// serialize state and store it in the annotation
 			cloudflareStateByteArray, err := json.Marshal(currentState)
 			if err != nil {
-				log.Error().Err(err)
+				log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Marshalling state failed", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace)
 				return status, err
 			}
 			ingress.Metadata.Annotations[annotationCloudflareState] = string(cloudflareStateByteArray)
@@ -661,7 +671,7 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 			// update ingress, because the state annotations have changed
 			ingress, err = client.ExtensionsV1Beta1().UpdateIngress(context.Background(), ingress)
 			if err != nil {
-				log.Error().Err(err)
+				log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Updating ingress state has failed", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace)
 				return status, err
 			}
 
