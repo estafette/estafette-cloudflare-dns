@@ -53,12 +53,3 @@ stages:
     when:
       status == 'succeeded' ||
       status == 'failed'
-
-  slack-notify:
-    image: extensions/slack-build-status:dev
-    workspace: estafette
-    channels:
-    - '#build-status'
-    when:
-      status == 'succeeded' ||
-      status == 'failed'
