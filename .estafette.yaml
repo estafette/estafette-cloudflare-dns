@@ -47,11 +47,11 @@ stages:
 
   slack-notify:
     image: extensions/slack-build-status:dev
-    webhook: estafette.secret(49oDHA1GU2Y9uNr9.1_rY9ehRjYRsHnVoW-_CcP70z2EvWYgcb3U7BteamAQgx6iXo_Zrgcf_ESs4AgvhA_o20FPllOoX6GoZ4VvZqepcS5KaOIi032ljAPDSO8-7xveayDxl63XGqp2c)
-    name: ${ESTAFETTE_LABEL_APP}
+    workspace: estafette
     channels:
     - '#build-status'
     when:
+      status == 'succeeded' ||
       status == 'failed'
 
   slack-notify:
