@@ -385,6 +385,12 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 			hostnames := strings.Split(desiredState.Hostnames, ",")
 			for _, hostname := range hostnames {
 
+				// validate hostname, skip if invalid
+				if !validateHostname(hostname) {
+					log.Error().Err(err).Msgf("[%v] Service %v.%v - Invalid dns record %v, skipping", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
+					continue
+				}
+
 				// if use origin is enabled, create a CNAME record pointing to the origin record
 				if desiredState.UseOriginRecord == "true" && desiredState.OriginRecordHostname != "" {
 
@@ -705,4 +711,19 @@ func processIngress(cf *Cloudflare, client *k8s.Client, ingress *extensionsv1bet
 	status = "skipped"
 
 	return status, nil
+}
+
+func validateHostname(hostname string) bool {
+	dnsNameParts := strings.Split(hostname, ".")
+	// we need at least a subdomain within a zone
+	if len(dnsNameParts) < 2 {
+		return false
+	}
+	// each label needs to be max 63 characters
+	for _, label := range dnsNameParts {
+		if len(label) > 63 {
+			return false
+		}
+	}
+	return true
 }
