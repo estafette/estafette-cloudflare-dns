@@ -17,7 +17,7 @@ version:
 
 stages:
   build:
-    image: golang:1.11.2-alpine3.8
+    image: golang:1.11.5-alpine3.8
     workDir: /go/src/github.com/estafette/${ESTAFETTE_LABEL_APP}
     env:
       CGO_ENABLED: 0
