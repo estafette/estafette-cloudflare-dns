@@ -1565,7 +1565,7 @@ func TestUpsertDNSRecord(t *testing.T) {
 		apiClient.restClient = fakeRESTClient
 
 		// act
-		_, err := apiClient.UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordContent)
+		_, err := apiClient.UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordContent, false)
 
 		assert.NotNil(t, err)
 	})
@@ -1675,7 +1675,7 @@ func TestUpsertDNSRecord(t *testing.T) {
 		apiClient.restClient = fakeRESTClient
 
 		// act
-		_, err := apiClient.UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordContent)
+		_, err := apiClient.UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordContent, false)
 
 		assert.NotNil(t, err)
 	})
@@ -1799,7 +1799,7 @@ func TestUpsertDNSRecord(t *testing.T) {
 		apiClient.restClient = fakeRESTClient
 
 		// act
-		createdDNSRecord, err := apiClient.UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordContent)
+		createdDNSRecord, err := apiClient.UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordContent, false)
 
 		assert.Nil(t, err)
 		assert.Equal(t, "372e67954025e0ba6aaa6d586b9e0b59", createdDNSRecord.ID)
@@ -1950,7 +1950,7 @@ func TestUpsertDNSRecord(t *testing.T) {
 		apiClient.restClient = fakeRESTClient
 
 		// act
-		createdDNSRecord, err := apiClient.UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordContent)
+		createdDNSRecord, err := apiClient.UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordContent, false)
 
 		assert.Nil(t, err)
 		assert.Equal(t, "6aaa6d586b9e0b59372e67954025e0ba", createdDNSRecord.ID)
@@ -2092,7 +2092,7 @@ func TestUpsertDNSRecord(t *testing.T) {
 		apiClient.restClient = fakeRESTClient
 
 		// act
-		_, err = apiClient.UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordContent)
+		_, err = apiClient.UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordContent, false)
 
 		assert.NotNil(t, err)
 	})
@@ -2248,7 +2248,7 @@ func TestUpsertDNSRecord(t *testing.T) {
 		apiClient.restClient = fakeRESTClient
 
 		// act
-		returnedDNSRecord, err := apiClient.UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordContent)
+		returnedDNSRecord, err := apiClient.UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordContent, false)
 
 		assert.Nil(t, err)
 		assert.Equal(t, "1.2.3.5", returnedDNSRecord.Content)
@@ -2261,7 +2261,7 @@ func TestUpdateProxySetting(t *testing.T) {
 	t.Run("ReturnsErrorIfZoneDoesNotExist", func(t *testing.T) {
 
 		dnsRecordName := "example.com"
-		proxy := "true"
+		proxy := true
 		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
 
 		fakeRESTClient := new(fakeRESTClient)
@@ -2293,7 +2293,7 @@ func TestUpdateProxySetting(t *testing.T) {
 	t.Run("ReturnsErrorIfDnsRecordDoesNotExist", func(t *testing.T) {
 
 		dnsRecordName := "www.example.com"
-		proxy := "true"
+		proxy := true
 
 		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
 
@@ -2391,7 +2391,7 @@ func TestUpdateProxySetting(t *testing.T) {
 	t.Run("ReturnsErrorIfUpdateFailed", func(t *testing.T) {
 
 		dnsRecordName := "www.example.com"
-		proxy := "true"
+		proxy := true
 		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
 
 		fakeRESTClient := new(fakeRESTClient)
@@ -2531,7 +2531,7 @@ func TestUpdateProxySetting(t *testing.T) {
 	t.Run("ReturnsUpdatedDnsRecordIfUpdateSucceeded", func(t *testing.T) {
 
 		dnsRecordName := "www.example.com"
-		proxy := "true"
+		proxy := true
 		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
 
 		fakeRESTClient := new(fakeRESTClient)
