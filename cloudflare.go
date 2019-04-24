@@ -311,7 +311,7 @@ func (cf *Cloudflare) UpdateDNSRecord(dnsRecordType, dnsRecordName, dnsRecordCon
 }
 
 // UpsertDNSRecord either updates or creates a dns record.
-func (cf *Cloudflare) UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordContent string) (r DNSRecord, err error) {
+func (cf *Cloudflare) UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordContent string, proxy bool) (r DNSRecord, err error) {
 
 	// get zone
 	zone, err := cf.GetZoneByDNSName(dnsRecordName)
@@ -355,6 +355,11 @@ func (cf *Cloudflare) UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordCon
 
 		} else {
 
+			// current record is proxied, but is desired not to be proxied; change first because the new record might not allow proxying
+			if r.Proxied && !proxy {
+				r.Proxied = proxy
+			}
+
 			// update record
 			var cloudflareDNSRecordsUpdateResult updateResult
 			cloudflareDNSRecordsUpdateResult, err = cf.updateDNSRecordByDNSRecord(r, dnsRecordType, dnsRecordContent)
@@ -382,7 +387,7 @@ func (cf *Cloudflare) UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordCon
 }
 
 // UpdateProxySetting updates the proxied setting for an existing dns record.
-func (cf *Cloudflare) UpdateProxySetting(dnsRecordName, proxy string) (r DNSRecord, err error) {
+func (cf *Cloudflare) UpdateProxySetting(dnsRecordName string, proxy bool) (r DNSRecord, err error) {
 
 	// get zone
 	zone, err := cf.GetZoneByDNSName(dnsRecordName)
@@ -408,7 +413,7 @@ func (cf *Cloudflare) UpdateProxySetting(dnsRecordName, proxy string) (r DNSReco
 
 		if r.Proxiable {
 
-			if proxy == "true" {
+			if proxy {
 				r.Proxied = true
 			} else {
 				r.Proxied = false
