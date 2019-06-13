@@ -247,6 +247,43 @@ func (cf *Cloudflare) DeleteDNSRecord(dnsRecordName string) (r bool, err error) 
 	return cf.deleteDNSRecordByZone(zone, dnsRecordName)
 }
 
+// DeleteDNSRecordIfMatching deletes a dns record only if the type and content match.
+func (cf *Cloudflare) DeleteDNSRecordIfMatching(dnsRecordName, dnsRecordType, dnsRecordContent string) (r bool, err error) {
+
+	// get zone
+	zone, err := cf.GetZoneByDNSName(dnsRecordName)
+	if err != nil {
+		return r, err
+	}
+
+	// get dns record
+	dnsRecordsResult, err := cf.getDNSRecordsByZoneAndName(zone, dnsRecordName)
+	if err != nil {
+		return r, err
+	}
+	if dnsRecordsResult.ResultInfo.Count == 0 {
+		err = errors.New("No matching dns record has been found")
+		return
+	}
+	dnsRecord := dnsRecordsResult.DNSRecords[0]
+
+	// check if type and content match
+	if dnsRecord.Type != dnsRecordType || dnsRecord.Content != dnsRecordContent {
+		err = errors.New("Type or content does not match")
+		return
+	}
+
+	// delete dns record
+	_, err = cf.deleteDNSRecordByDNSRecord(dnsRecord)
+	if err != nil {
+		return
+	}
+
+	r = true
+
+	return
+}
+
 func (cf *Cloudflare) updateDNSRecordByDNSRecord(dnsRecord DNSRecord, dnsRecordType, dnsRecordContent string) (r updateResult, err error) {
 
 	// check dnsRecordType

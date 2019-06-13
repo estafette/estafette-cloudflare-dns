@@ -158,7 +158,15 @@ func main() {
 
 					if *event.Type == k8s.EventAdded || *event.Type == k8s.EventModified || *event.Type == k8s.EventDeleted {
 						if *event.Type == k8s.EventDeleted {
-							log.Debug().Interface("service", service).Msgf("Deleting service %v.%v", *service.Metadata.Name, *service.Metadata.Namespace)
+							waitGroup.Add(1)
+							status, err := deleteService(cf, client, service, fmt.Sprintf("watcher:%v", *event.Type))
+							dnsRecordsTotals.With(prometheus.Labels{"namespace": *service.Metadata.Namespace, "status": status, "initiator": "watcher", "type": "service"}).Inc()
+							waitGroup.Done()
+
+							if err != nil {
+								log.Error().Err(err).Msgf("Deleting service %v.%v failed", *service.Metadata.Name, *service.Metadata.Namespace)
+								continue
+							}
 						} else {
 							waitGroup.Add(1)
 							status, err := processService(cf, client, service, fmt.Sprintf("watcher:%v", *event.Type))
@@ -200,7 +208,15 @@ func main() {
 
 					if *event.Type == k8s.EventAdded || *event.Type == k8s.EventModified || *event.Type == k8s.EventDeleted {
 						if *event.Type == k8s.EventDeleted {
-							log.Debug().Interface("ingress", ingress).Msgf("Deleting ingress %v.%v", *ingress.Metadata.Name, *ingress.Metadata.Namespace)
+							waitGroup.Add(1)
+							status, err := deleteIngress(cf, client, ingress, fmt.Sprintf("watcher:%v", *event.Type))
+							dnsRecordsTotals.With(prometheus.Labels{"namespace": *ingress.Metadata.Namespace, "status": status, "initiator": "watcher", "type": "ingress"}).Inc()
+							waitGroup.Done()
+
+							if err != nil {
+								log.Error().Err(err).Msgf("Deleting ingress %v.%v failed", *ingress.Metadata.Name, *ingress.Metadata.Namespace)
+								continue
+							}
 						} else {
 							waitGroup.Add(1)
 							status, err := processIngress(cf, client, ingress, fmt.Sprintf("watcher:%v", *event.Type))
@@ -532,6 +548,39 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, 
 	return status, nil
 }
 
+func deleteService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, initiator string) (status string, err error) {
+
+	status = "failed"
+
+	if &service != nil && &service.Metadata != nil && &service.Metadata.Annotations != nil {
+
+		desiredState := getDesiredServiceState(service)
+
+		dnsRecordType := "A"
+		if desiredState.UseOriginRecord == "true" && desiredState.OriginRecordHostname != "" {
+			dnsRecordType = "CNAME"
+		}
+
+		// loop all hostnames
+		hostnames := strings.Split(desiredState.Hostnames, ",")
+		for _, hostname := range hostnames {
+			log.Info().Msgf("[%v] Service %v.%v - Deleting dns record %v (%v) with ip address %v...", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, dnsRecordType, desiredState.IPAddress)
+			_, err = cf.DeleteDNSRecordIfMatching(hostname, dnsRecordType, desiredState.IPAddress)
+			if err != nil {
+				log.Warn().Err(err).Msgf("[%v] Service %v.%v - Failed deleting dns record %v (%v) with ip address %v...", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, dnsRecordType, desiredState.IPAddress)
+			} else {
+				status = "deleted"
+			}
+		}
+
+		return
+	}
+
+	status = "skipped"
+
+	return status, nil
+}
+
 func getDesiredIngressState(ingress *extensionsv1beta1.Ingress) (state CloudflareState) {
 
 	var ok bool
@@ -712,6 +761,39 @@ func processIngress(cf *Cloudflare, client *k8s.Client, ingress *extensionsv1bet
 		currentState := getCurrentIngressState(ingress)
 
 		status, err = makeIngressChanges(cf, client, ingress, initiator, desiredState, currentState)
+
+		return
+	}
+
+	status = "skipped"
+
+	return status, nil
+}
+
+func deleteIngress(cf *Cloudflare, client *k8s.Client, ingress *extensionsv1beta1.Ingress, initiator string) (status string, err error) {
+
+	status = "failed"
+
+	if &ingress != nil && &ingress.Metadata != nil && &ingress.Metadata.Annotations != nil {
+
+		desiredState := getDesiredIngressState(ingress)
+
+		dnsRecordType := "A"
+		if desiredState.UseOriginRecord == "true" && desiredState.OriginRecordHostname != "" {
+			dnsRecordType = "CNAME"
+		}
+
+		// loop all hostnames
+		hostnames := strings.Split(desiredState.Hostnames, ",")
+		for _, hostname := range hostnames {
+			log.Info().Msgf("[%v] Ingress %v.%v - Deleting dns record %v (%v) with ip address %v...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname, dnsRecordType, desiredState.IPAddress)
+			_, err = cf.DeleteDNSRecordIfMatching(hostname, dnsRecordType, desiredState.IPAddress)
+			if err != nil {
+				log.Warn().Err(err).Msgf("[%v] Ingress %v.%v - Failed deleting dns record %v (%v) with ip address %v...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname, dnsRecordType, desiredState.IPAddress)
+			} else {
+				status = "deleted"
+			}
+		}
 
 		return
 	}
