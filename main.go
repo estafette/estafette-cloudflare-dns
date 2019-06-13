@@ -156,15 +156,19 @@ func main() {
 						break
 					}
 
-					if *event.Type == k8s.EventAdded || *event.Type == k8s.EventModified {
-						waitGroup.Add(1)
-						status, err := processService(cf, client, service, fmt.Sprintf("watcher:%v", *event.Type))
-						dnsRecordsTotals.With(prometheus.Labels{"namespace": *service.Metadata.Namespace, "status": status, "initiator": "watcher", "type": "service"}).Inc()
-						waitGroup.Done()
+					if *event.Type == k8s.EventAdded || *event.Type == k8s.EventModified || *event.Type == k8s.EventDeleted {
+						if *event.Type == k8s.EventDeleted {
+							log.Debug().Interface("service", service).Msfg("Deleting service %v.%v", *service.Metadata.Name, *service.Metadata.Namespace)
+						} else {
+							waitGroup.Add(1)
+							status, err := processService(cf, client, service, fmt.Sprintf("watcher:%v", *event.Type))
+							dnsRecordsTotals.With(prometheus.Labels{"namespace": *service.Metadata.Namespace, "status": status, "initiator": "watcher", "type": "service"}).Inc()
+							waitGroup.Done()
 
-						if err != nil {
-							log.Error().Err(err).Msgf("Processing service %v.%v failed", *service.Metadata.Name, *service.Metadata.Namespace)
-							continue
+							if err != nil {
+								log.Error().Err(err).Msgf("Processing service %v.%v failed", *service.Metadata.Name, *service.Metadata.Namespace)
+								continue
+							}
 						}
 					}
 				}
@@ -194,15 +198,19 @@ func main() {
 						break
 					}
 
-					if *event.Type == k8s.EventAdded || *event.Type == k8s.EventModified {
-						waitGroup.Add(1)
-						status, err := processIngress(cf, client, ingress, fmt.Sprintf("watcher:%v", *event.Type))
-						dnsRecordsTotals.With(prometheus.Labels{"namespace": *ingress.Metadata.Namespace, "status": status, "initiator": "watcher", "type": "ingress"}).Inc()
-						waitGroup.Done()
+					if *event.Type == k8s.EventAdded || *event.Type == k8s.EventModified || *event.Type == k8s.EventDeleted {
+						if *event.Type == k8s.EventDeleted {
+							log.Debug().Interface("ingress", ingress).Msfg("Deleting ingress %v.%v", *ingress.Metadata.Name, *ingress.Metadata.Namespace)
+						} else {
+							waitGroup.Add(1)
+							status, err := processIngress(cf, client, ingress, fmt.Sprintf("watcher:%v", *event.Type))
+							dnsRecordsTotals.With(prometheus.Labels{"namespace": *ingress.Metadata.Namespace, "status": status, "initiator": "watcher", "type": "ingress"}).Inc()
+							waitGroup.Done()
 
-						if err != nil {
-							log.Error().Err(err).Msgf("Processing ingress %v.%v failed", *ingress.Metadata.Name, *ingress.Metadata.Namespace)
-							continue
+							if err != nil {
+								log.Error().Err(err).Msgf("Processing ingress %v.%v failed", *ingress.Metadata.Name, *ingress.Metadata.Namespace)
+								continue
+							}
 						}
 					}
 				}
