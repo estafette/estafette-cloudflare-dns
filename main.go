@@ -158,7 +158,7 @@ func main() {
 
 					if *event.Type == k8s.EventAdded || *event.Type == k8s.EventModified || *event.Type == k8s.EventDeleted {
 						if *event.Type == k8s.EventDeleted {
-							log.Debug().Interface("service", service).Msfg("Deleting service %v.%v", *service.Metadata.Name, *service.Metadata.Namespace)
+							log.Debug().Interface("service", service).Msgf("Deleting service %v.%v", *service.Metadata.Name, *service.Metadata.Namespace)
 						} else {
 							waitGroup.Add(1)
 							status, err := processService(cf, client, service, fmt.Sprintf("watcher:%v", *event.Type))
@@ -200,7 +200,7 @@ func main() {
 
 					if *event.Type == k8s.EventAdded || *event.Type == k8s.EventModified || *event.Type == k8s.EventDeleted {
 						if *event.Type == k8s.EventDeleted {
-							log.Debug().Interface("ingress", ingress).Msfg("Deleting ingress %v.%v", *ingress.Metadata.Name, *ingress.Metadata.Namespace)
+							log.Debug().Interface("ingress", ingress).Msgf("Deleting ingress %v.%v", *ingress.Metadata.Name, *ingress.Metadata.Namespace)
 						} else {
 							waitGroup.Add(1)
 							status, err := processIngress(cf, client, ingress, fmt.Sprintf("watcher:%v", *event.Type))
