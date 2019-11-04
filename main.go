@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	stdlog "log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -16,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/rs/zerolog"
+	foundation "github.com/estafette/estafette-foundation"
 	"github.com/rs/zerolog/log"
 
 	"github.com/ericchiang/k8s"
@@ -48,6 +47,8 @@ type CloudflareState struct {
 }
 
 var (
+	appgroup  string
+	app       string
 	version   string
 	branch    string
 	revision  string
@@ -81,27 +82,8 @@ func main() {
 	// parse command line parameters
 	flag.Parse()
 
-	// log as severity for stackdriver logging to recognize the level
-	zerolog.LevelFieldName = "severity"
-
-	// set some default fields added to all logs
-	log.Logger = zerolog.New(os.Stdout).With().
-		Timestamp().
-		Str("app", "estafette-cloudflare-dns").
-		Str("version", version).
-		Logger()
-
-	// use zerolog for any logs sent via standard log library
-	stdlog.SetFlags(0)
-	stdlog.SetOutput(log.Logger)
-
-	// log startup message
-	log.Info().
-		Str("branch", branch).
-		Str("revision", revision).
-		Str("buildDate", buildDate).
-		Str("goVersion", goVersion).
-		Msg("Starting estafette-cloudflare-dns...")
+	// configure json logging
+	foundation.InitLogging(appgroup, app, version, branch, revision, buildDate)
 
 	// create cloudflare api client
 	cfAPIKey := os.Getenv("CF_API_KEY")
