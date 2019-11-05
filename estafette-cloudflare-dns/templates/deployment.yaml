@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "estafette-cloudflare-dns.fullname" . }}
+  labels:
+{{ include "estafette-cloudflare-dns.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ include "estafette-cloudflare-dns.fullname" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "estafette-cloudflare-dns.fullname" . }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9101"
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      serviceAccountName: {{ template "estafette-cloudflare-dns.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ template "estafette-cloudflare-dns.imageTag" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+          - name: "CF_API_EMAIL"
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "estafette-cloudflare-dns.fullname" . }}
+                key: cloudflareApiEmail
+          - name: "CF_API_KEY"
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "estafette-cloudflare-dns.fullname" . }}
+                key: cloudflareApiKey
+          ports:
+            - name: metrics
+              containerPort: 9101
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 30
+            timeoutSeconds: 1
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
