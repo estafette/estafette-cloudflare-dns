@@ -62,7 +62,7 @@ stages:
     - kubectl -n kube-system create serviceaccount tiller
     - kubectl create clusterrolebinding tiller --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
     - helm init --service-account tiller --wait
-    - helm install --name ${ESTAFETTE_GIT_NAME} ${ESTAFETTE_GIT_NAME} --namespace estafette --wait | kubectl logs -l app=${ESTAFETTE_GIT_NAME} -n estafette & exit 1
+    - helm install --name ${ESTAFETTE_GIT_NAME} ./${ESTAFETTE_GIT_NAME} --namespace estafette --wait
 
   package-helm-chart:
     image: alpine/helm:2.15.1
