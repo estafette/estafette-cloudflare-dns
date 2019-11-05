@@ -84,7 +84,7 @@ stages:
     - apk add git
     - cp *.tgz helm-charts
     - cd helm-charts
-    - helm repo index --url https://helm.estafette.io/ --merge index.yaml
+    - helm repo index --url https://helm.estafette.io/ --merge index.yaml .
     - git config --global user.email "bot@estafette.io"
     - git config --global user.name "Estafette bot"
     - git add --all
@@ -120,7 +120,7 @@ releases:
         - apk add git
         - cp *.tgz helm-charts
         - cd helm-charts
-        - helm repo index --url https://helm.estafette.io/ --merge index.yaml
+        - helm repo index --url https://helm.estafette.io/ --merge index.yaml .
         - git config --global user.email "bot@estafette.io"
         - git config --global user.name "Estafette bot"
         - git add --all
