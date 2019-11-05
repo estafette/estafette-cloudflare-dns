@@ -71,6 +71,7 @@ stages:
     - helm init --service-account tiller --wait
     - helm template --name ${ESTAFETTE_GIT_NAME} ${ESTAFETTE_GIT_NAME}-${ESTAFETTE_BUILD_VERSION_MAJOR}.${ESTAFETTE_BUILD_VERSION_MINOR}.0-pre-${ESTAFETTE_BUILD_VERSION_PATCH}.tgz --namespace estafette --set secret.cloudflareApiEmail=bot@estafette.io --set secret.cloudflareApiKey=abc
     - helm upgrade --install ${ESTAFETTE_GIT_NAME} ${ESTAFETTE_GIT_NAME}-${ESTAFETTE_BUILD_VERSION_MAJOR}.${ESTAFETTE_BUILD_VERSION_MINOR}.0-pre-${ESTAFETTE_BUILD_VERSION_PATCH}.tgz --namespace estafette --set secret.cloudflareApiEmail=bot@estafette.io --set secret.cloudflareApiKey=abc --wait || (kubectl logs -l app=${ESTAFETTE_GIT_NAME} -n estafette && exit 1)
+    - kubectl logs -l app=${ESTAFETTE_GIT_NAME} -n estafette
 
   clone-charts-repo:
     image: extensions/git-clone:dev
