@@ -60,6 +60,6 @@ affinity:
 
 secret:
   # set an email address for a cloudflare account (no need to base64 encode, the template does that)
-  cloudflareApiEmail:
+  cloudflareApiEmail: ""
   # set an api key for a cloudflare account (no need to base64 encode, the template does that)
-  cloudflareApiKey:
+  cloudflareApiKey: ""
