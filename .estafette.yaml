@@ -82,7 +82,8 @@ stages:
     image: alpine/helm:2.15.1
     commands:
     - apk add git
-    - cp *.tgz helm-charts
+    - mkdir -p helm-charts/charts
+    - cp *.tgz helm-charts/charts
     - cd helm-charts
     - helm repo index --url https://helm.estafette.io/ --merge index.yaml .
     - git config --global user.email "bot@estafette.io"
@@ -118,7 +119,8 @@ releases:
         image: alpine/helm:2.15.1
         commands:
         - apk add git
-        - cp *.tgz helm-charts
+        - mkdir -p helm-charts/charts
+        - cp *.tgz helm-charts/charts
         - cd helm-charts
         - helm repo index --url https://helm.estafette.io/ --merge index.yaml .
         - git config --global user.email "bot@estafette.io"
