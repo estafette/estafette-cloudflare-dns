@@ -58,6 +58,9 @@ affinity:
           values:
           - "true"
 
+# can be used to set additional environment variables
+extraEnv: {}
+
 secret:
   # set an email address for a cloudflare account (no need to base64 encode, the template does that)
   cloudflareApiEmail: ""

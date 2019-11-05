@@ -16,6 +16,7 @@ spec:
     metadata:
       labels:
         app: {{ include "estafette-cloudflare-dns.fullname" . }}
+        version: {{ .Chart.AppVersion | quote }}
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9101"
@@ -34,16 +35,17 @@ spec:
           image: "{{ .Values.image.repository }}:{{ template "estafette-cloudflare-dns.imageTag" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
-          - name: "CF_API_EMAIL"
-            valueFrom:
-              secretKeyRef:
-                name: {{ include "estafette-cloudflare-dns.fullname" . }}
-                key: cloudflareApiEmail
-          - name: "CF_API_KEY"
-            valueFrom:
-              secretKeyRef:
-                name: {{ include "estafette-cloudflare-dns.fullname" . }}
-                key: cloudflareApiKey
+            - name: "CF_API_EMAIL"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "estafette-cloudflare-dns.fullname" . }}
+                  key: cloudflareApiEmail
+            - name: "CF_API_KEY"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "estafette-cloudflare-dns.fullname" . }}
+                  key: cloudflareApiKey
+            {{- toYaml .Values.extraEnv | nindent 12 }}
           ports:
             - name: metrics
               containerPort: 9101
