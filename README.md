@@ -10,12 +10,20 @@ In order not to have to set dns records manually or from deployment scripts this
 
 ## Installation
 
-Deploy with Helm:
+Prepare using Helm:
 
 ```
 brew install kubernetes-helm
+kubectl -n kube-system create serviceaccount tiller
+kubectl create clusterrolebinding tiller --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
+helm init --service-account tiller --wait
+```
+
+Then install or upgrade with Helm:
+
+```
 helm repo add estafette https://helm.estafette.io
-helm install --name estafette-cloudflare-dns --namespace estafette estafette/estafette-cloudflare-dns
+helm upgrade --install estafette-cloudflare-dns --namespace estafette estafette/estafette-cloudflare-dns
 ```
 
 ## Usage
