@@ -11,7 +11,8 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      app: {{ include "estafette-cloudflare-dns.fullname" . }}
+      app.kubernetes.io/name: {{ include "estafette-cloudflare-dns.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
   template:
     metadata:
       labels:
