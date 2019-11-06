@@ -59,6 +59,9 @@ stages:
     image: extensions/helm:dev
     action: test
     prerelease: true
+    values:
+    - secret.cloudflareApiEmail=bot@estafette.io
+    - secret.cloudflareApiKey=abc
 
   clone-charts-repo:
     image: extensions/git-clone:dev
