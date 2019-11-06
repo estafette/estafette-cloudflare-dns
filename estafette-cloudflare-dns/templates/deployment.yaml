@@ -16,7 +16,14 @@ spec:
   template:
     metadata:
       labels:
-{{ include "estafette-cloudflare-dns.labels" . | indent 8 }}
+        app.kubernetes.io/name: {{ include "estafette-cloudflare-dns.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- if .Chart.AppVersion }}
+        app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+        {{- end }}
+        {{- range $key, $value := .Values.extraPodLabels }}
+        {{ $key }}: {{ $value }}
+        {{- end }}
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9101"
@@ -34,6 +41,10 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ template "estafette-cloudflare-dns.imageTag" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.extraArgs }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           env:
             - name: "CF_API_EMAIL"
               valueFrom:
