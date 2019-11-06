@@ -37,12 +37,12 @@ stages:
     - estafette
 
   lint-helm-chart:
-    image: extension/helm:dev
+    image: extensions/helm:dev
     action: lint
     prerelease: true
 
   package-helm-chart:
-    image: extension/helm:dev
+    image: extensions/helm:dev
     action: package
     prerelease: true
 
@@ -56,7 +56,7 @@ stages:
         readiness:
           path: /kubernetes-ready
           timeoutSeconds: 180
-    image: extension/helm:dev
+    image: extensions/helm:dev
     action: test
     prerelease: true
 
@@ -66,7 +66,7 @@ stages:
     branch: master
 
   publish-helm-chart:
-    image: extension/helm:dev
+    image: extensions/helm:dev
     action: publish
     prerelease: true
 
@@ -84,7 +84,7 @@ releases:
     clone: true
     stages:
       package-helm-chart:
-        image: extension/helm:dev
+        image: extensions/helm:dev
         action: package
 
       clone-charts-repo:
@@ -93,7 +93,7 @@ releases:
         branch: master
 
       publish-helm-chart:
-        image: extension/helm:dev
+        image: extensions/helm:dev
         action: publish
 
       create-github-release:
