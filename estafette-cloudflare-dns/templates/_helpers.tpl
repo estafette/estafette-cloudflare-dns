@@ -41,6 +41,9 @@ helm.sh/chart: {{ include "estafette-cloudflare-dns.chart" . }}
 version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- range $key, $value := .Values.extraLabels }}
+{{ $key }}: {{ $value }}
+{{- end }}
 {{- end -}}
 
 {{/*
