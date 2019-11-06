@@ -2,14 +2,14 @@ builder:
   track: dev
 
 labels:
-  app-group: estafette-various
+  app-group: estafette-controllers
   team: estafette-team
   language: golang
 
 version:
   semver:
     major: 1
-    minor: 0
+    minor: 2
 
 stages:
   build:
@@ -35,10 +35,43 @@ stages:
     action: push
     repositories:
     - estafette
-    when:
-      status == 'succeeded' &&
-      branch == 'master' &&
-      server == 'gocd'
+
+  lint-helm-chart:
+    image: extensions/helm:dev
+    action: lint
+    prerelease: true
+
+  package-helm-chart:
+    image: extensions/helm:dev
+    action: package
+    prerelease: true
+
+  test-helm-chart:
+    services:
+    - name: kubernetes
+      image: bsycorp/kind:latest-1.12
+      ports:
+      - port: 8443
+      - port: 10080
+        readiness:
+          path: /kubernetes-ready
+          timeoutSeconds: 180
+    image: extensions/helm:dev
+    action: test
+    prerelease: true
+    values:
+    - secret.cloudflareApiEmail=bot@estafette.io
+    - secret.cloudflareApiKey=abc
+
+  clone-charts-repo:
+    image: extensions/git-clone:dev
+    repo: helm-charts
+    branch: master
+
+  publish-helm-chart:
+    image: extensions/helm:dev
+    action: publish
+    prerelease: true
 
   slack-notify:
     image: extensions/slack-build-status:dev
@@ -48,3 +81,25 @@ stages:
     when:
       status == 'succeeded' ||
       status == 'failed'
+
+releases:
+  release:
+    clone: true
+    stages:
+      package-helm-chart:
+        image: extensions/helm:dev
+        action: package
+
+      clone-charts-repo:
+        image: extensions/git-clone:dev
+        repo: helm-charts
+        branch: master
+
+      publish-helm-chart:
+        image: extensions/helm:dev
+        action: publish
+
+      create-github-release:
+        image: extensions/github-release:dev
+        version: ${ESTAFETTE_BUILD_VERSION_MAJOR}.${ESTAFETTE_BUILD_VERSION_MINOR}.0
+        closeMilestone: true
