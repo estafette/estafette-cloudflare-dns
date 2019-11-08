@@ -3,4 +3,5 @@ appVersion: "1.0"
 description: Kubernetes controller to set and update dns records in Cloudflare for annotated services and ingresses
 name: estafette-cloudflare-dns
 version: 0.1.0
-icon: https://estafette.io/apple-touch-icon.png
+home: https://helm.estafette.io
+icon: https://helm.estafette.io/icon.png
