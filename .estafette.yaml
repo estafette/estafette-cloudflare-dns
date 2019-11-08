@@ -10,6 +10,9 @@ version:
   semver:
     major: 1
     minor: 2
+    patch: 1
+    labelTemplate: 'beta-{{auto}}'
+    releaseBranch: 1.2.1
 
 stages:
   build:
@@ -39,12 +42,12 @@ stages:
   lint-helm-chart:
     image: extensions/helm:dev
     action: lint
-    prerelease: true
+    version: ${ESTAFETTE_BUILD_VERSION}
 
   package-helm-chart:
     image: extensions/helm:dev
     action: package
-    prerelease: true
+    version: ${ESTAFETTE_BUILD_VERSION}
 
   test-helm-chart:
     services:
@@ -58,7 +61,7 @@ stages:
           timeoutSeconds: 180
     image: extensions/helm:dev
     action: test
-    prerelease: true
+    version: ${ESTAFETTE_BUILD_VERSION}
     values:
     - secret.cloudflareApiEmail=bot@estafette.io
     - secret.cloudflareApiKey=abc
@@ -71,7 +74,7 @@ stages:
   publish-helm-chart:
     image: extensions/helm:dev
     action: publish
-    prerelease: true
+    version: ${ESTAFETTE_BUILD_VERSION}
 
   slack-notify:
     image: extensions/slack-build-status:dev
@@ -86,21 +89,7 @@ releases:
   release:
     clone: true
     stages:
-      package-helm-chart:
-        image: extensions/helm:dev
-        action: package
-
-      clone-charts-repo:
-        image: extensions/git-clone:dev
-        repo: helm-charts
-        branch: master
-
-      publish-helm-chart:
-        image: extensions/helm:dev
-        action: publish
-        purgePrerelease: true
-
       create-github-release:
         image: extensions/github-release:dev
-        version: ${ESTAFETTE_BUILD_VERSION_MAJOR}.${ESTAFETTE_BUILD_VERSION_MINOR}.0
+        version: ${ESTAFETTE_BUILD_VERSION}
         closeMilestone: true
