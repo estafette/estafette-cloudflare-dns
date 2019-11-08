@@ -2,6 +2,20 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+#
+# APPLICATION SETTINGS
+#
+
+secret:
+  # set an email address for a cloudflare account (no need to base64 encode, the template does that)
+  cloudflareApiEmail: ""
+  # set an api key for a cloudflare account (no need to base64 encode, the template does that)
+  cloudflareApiKey: ""
+
+#
+# GENERIC SETTINGS
+#
+
 replicaCount: 1
 
 image:
@@ -70,9 +84,3 @@ extraLabels: {}
 
 # use to add extra labels to podspec for getting their values in prometheus
 extraPodLabels: {}
-
-secret:
-  # set an email address for a cloudflare account (no need to base64 encode, the template does that)
-  cloudflareApiEmail: ""
-  # set an api key for a cloudflare account (no need to base64 encode, the template does that)
-  cloudflareApiKey: ""
