@@ -7,6 +7,8 @@
 #
 
 secret:
+  # if set to true the values are already base64 encoded when provided, otherwise the template performs the base64 encoding
+  valuesAreBase64Encoded: false
   # set an email address for a cloudflare account (no need to base64 encode, the template does that)
   cloudflareApiEmail: ""
   # set an api key for a cloudflare account (no need to base64 encode, the template does that)
