@@ -7,10 +7,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/ericchiang/k8s v0.2.0 h1:8RILhZLG9MSpWFNQJrwp0K7J0vt6T7y40Q01ZPc61tI=
 github.com/ericchiang/k8s v0.2.0/go.mod h1:/OmBgSq2cd9IANnsGHGlEz27nwMZV2YxlpXuQtU3Bz4=
-github.com/estafette/estafette-foundation v0.0.21 h1:OCO9lqElDMlf0bAKX6rB+ced0DMZNKFOfhnhrRQmjv8=
-github.com/estafette/estafette-foundation v0.0.21/go.mod h1:CugZ5IABfGepKKoAri5ObS1R25esdTcuD8XNAD24+vA=
-github.com/estafette/estafette-foundation v0.0.31 h1:1+0i5IiTE7WH5Fd1n44OeMsreM1f4HI73EI3Prjg9Ic=
-github.com/estafette/estafette-foundation v0.0.31/go.mod h1:pgqDp5MyMR9PgRFwU5w7zb8XAa8hkyaf51Sutl04llY=
+github.com/estafette/estafette-foundation v0.0.32 h1:s32Gt59N1+tkv5CKbtPtCtxGFqXUecfl9v9/IB1sv9I=
+github.com/estafette/estafette-foundation v0.0.32/go.mod h1:pgqDp5MyMR9PgRFwU5w7zb8XAa8hkyaf51Sutl04llY=
 github.com/fsnotify/fsnotify v1.4.7 h1:IXs+QLmnXW2CcXuY+8Mzv/fWEsPGWxqefPtCP5CnV9I=
 github.com/fsnotify/fsnotify v1.4.7/go.mod h1:jwhsz4b93w/PPRr/qN1Yymfu8t87LnFCMoQvtojpjFo=
 github.com/go-kit/kit v0.8.0/go.mod h1:xBxKIO96dXMWWy0MnWVtmwkA9/13aqxPnvrjFYMA2as=

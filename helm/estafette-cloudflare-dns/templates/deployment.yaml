@@ -48,7 +48,7 @@ spec:
           {{- end }}
           env:
             - name: "ESTAFETTE_LOG_FORMAT"
-              value: "{{ .Values.logFormat" }}
+              value: "{{ .Values.logFormat }}"
             - name: "CF_API_EMAIL"
               valueFrom:
                 secretKeyRef:
