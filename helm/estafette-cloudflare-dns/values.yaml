@@ -14,6 +14,9 @@ secret:
   # set an api key for a cloudflare account (no need to base64 encode, the template does that)
   cloudflareApiKey: ""
 
+# the following log formats are available: plaintext, console, json, stackdriver, v3 (see https://github.com/estafette/estafette-foundation for more info)
+logFormat: plaintext
+
 #
 # GENERIC SETTINGS
 #

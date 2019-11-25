@@ -82,8 +82,8 @@ func main() {
 	// parse command line parameters
 	flag.Parse()
 
-	// configure json logging
-	foundation.InitLogging(appgroup, app, version, branch, revision, buildDate)
+	// init log format from envvar ESTAFETTE_LOG_FORMAT
+	foundation.InitLoggingFromEnv(appgroup, app, version, branch, revision, buildDate)
 
 	// create cloudflare api client
 	cfAPIKey := os.Getenv("CF_API_KEY")
