@@ -3,18 +3,14 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"math/rand"
-	"net/http"
-	"os"
-	"os/signal"
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
+	"github.com/alecthomas/kingpin"
 	foundation "github.com/estafette/estafette-foundation"
 	"github.com/rs/zerolog/log"
 
@@ -22,7 +18,6 @@ import (
 	apiv1 "github.com/ericchiang/k8s/api/v1"
 	extensionsv1beta1 "github.com/ericchiang/k8s/apis/extensions/v1beta1"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const annotationCloudflareDNS string = "estafette.io/cloudflare-dns"
@@ -57,7 +52,8 @@ var (
 )
 
 var (
-	addr = flag.String("listen-address", ":9101", "The address to listen on for HTTP requests.")
+	cfAPIKey   = kingpin.Flag("cloudflare-api-key", "The Cloudflare API key.").Envar("CF_API_KEY").Required().String()
+	cfAPIEmail = kingpin.Flag("cloudflare-api-email", "The Cloudflare API email address.").Envar("CF_API_EMAIL").Required().String()
 
 	// seed random number
 	r = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -80,22 +76,15 @@ func init() {
 func main() {
 
 	// parse command line parameters
-	flag.Parse()
+	kingpin.Parse()
 
 	// init log format from envvar ESTAFETTE_LOG_FORMAT
-	foundation.InitLoggingFromEnv(appgroup, app, version, branch, revision, buildDate)
+	foundation.InitLoggingFromEnv(foundation.NewApplicationInfo(appgroup, app, version, branch, revision, buildDate))
 
-	// create cloudflare api client
-	cfAPIKey := os.Getenv("CF_API_KEY")
-	if cfAPIKey == "" {
-		log.Fatal().Msg("CF_API_KEY is required. Please set CF_API_KEY environment variable to your Cloudflare API key.")
-	}
-	cfAPIEmail := os.Getenv("CF_API_EMAIL")
-	if cfAPIEmail == "" {
-		log.Fatal().Msg("CF_API_EMAIL is required. Please set CF_API_KEY environment variable to your Cloudflare API email.")
-	}
+	// init /liveness endpoint
+	foundation.InitLiveness()
 
-	cf := New(APIAuthentication{Key: cfAPIKey, Email: cfAPIEmail})
+	cf := New(APIAuthentication{Key: *cfAPIKey, Email: *cfAPIEmail})
 
 	// create kubernetes api client
 	client, err := k8s.NewInClusterClient()
@@ -103,23 +92,9 @@ func main() {
 		log.Fatal().Err(err).Msg("Creating Kubernetes api client failed")
 	}
 
-	// start prometheus
-	go func() {
-		log.Debug().
-			Str("port", *addr).
-			Msg("Serving Prometheus metrics...")
+	foundation.InitMetrics()
 
-		http.Handle("/metrics", promhttp.Handler())
-
-		if err := http.ListenAndServe(*addr, nil); err != nil {
-			log.Fatal().Err(err).Msg("Starting Prometheus listener failed")
-		}
-	}()
-
-	// define channel and wait group to gracefully shutdown the application
-	gracefulShutdown := make(chan os.Signal)
-	signal.Notify(gracefulShutdown, syscall.SIGTERM, syscall.SIGINT)
-	waitGroup := &sync.WaitGroup{}
+	gracefulShutdown, waitGroup := foundation.InitGracefulShutdownHandling()
 
 	// watch services for all namespaces
 	go func(waitGroup *sync.WaitGroup) {
@@ -280,13 +255,7 @@ func main() {
 		}
 	}(waitGroup)
 
-	signalReceived := <-gracefulShutdown
-	log.Info().
-		Msgf("Received signal %v. Waiting on running tasks to finish...", signalReceived)
-
-	waitGroup.Wait()
-
-	log.Info().Msg("Shutting down...")
+	foundation.HandleGracefulShutdown(gracefulShutdown, waitGroup)
 }
 
 func applyJitter(input int) (output int) {
