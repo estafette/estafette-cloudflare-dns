@@ -126,7 +126,7 @@ func main() {
 
 						service, ok := event.Object.(*v1.Service)
 						if !ok {
-							log.Warn().Msg("Watcher for pods returns event object of incorrect type")
+							log.Warn().Msg("Watcher for services returns event object of incorrect type")
 							break
 						}
 
