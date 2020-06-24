@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"math/rand"
 	"runtime"
 	"strings"
@@ -16,9 +15,11 @@ import (
 	v1 "k8s.io/api/core/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/watch"
+	k8sruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 )
 
 const annotationCloudflareDNS string = "estafette.io/cloudflare-dns"
@@ -98,134 +99,30 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed creating kubernetes clientset")
 	}
 
+	// create the shared informer factory and use the client to connect to Kubernetes API
+	factory := informers.NewSharedInformerFactory(kubeClientset, 0)
+
+	// create a channel to stop the shared informers gracefully
+	stopper := make(chan struct{})
+	defer close(stopper)
+
+	// handle kubernetes API crashes
+	defer k8sruntime.HandleCrash()
+
 	foundation.InitMetrics()
 
 	gracefulShutdown, waitGroup := foundation.InitGracefulShutdownHandling()
 
 	// watch services for all namespaces
-	go func(waitGroup *sync.WaitGroup) {
-		// loop indefinitely
-		for {
-			log.Info().Msg("Watching services for all namespaces...")
-			timeoutSeconds := int64(300)
-			watcher, err := kubeClientset.CoreV1().Services("").Watch(metav1.ListOptions{
-				TimeoutSeconds: &timeoutSeconds,
-			})
-			if err != nil {
-				log.Error().Err(err).Msg("WatchServices call failed")
-			} else {
-				// loop indefinitely, unless it errors
-				for {
-					event, ok := <-watcher.ResultChan()
-					if !ok {
-						log.Warn().Msg("Watcher for services is closed")
-						break
-					}
-
-					if event.Type == watch.Added || event.Type == watch.Modified || event.Type == watch.Deleted {
-
-						service, ok := event.Object.(*v1.Service)
-						if !ok {
-							log.Warn().Msg("Watcher for services returns event object of incorrect type")
-							break
-						}
-
-						if event.Type == watch.Deleted {
-							waitGroup.Add(1)
-							status, err := deleteService(cf, kubeClientset, service, fmt.Sprintf("watcher:%v", event.Type))
-							dnsRecordsTotals.With(prometheus.Labels{"namespace": service.Namespace, "status": status, "initiator": "watcher", "type": "service"}).Inc()
-							waitGroup.Done()
-
-							if err != nil {
-								log.Error().Err(err).Msgf("Deleting service %v.%v failed", service.Name, service.Namespace)
-								continue
-							}
-						} else {
-							waitGroup.Add(1)
-							status, err := processService(cf, kubeClientset, service, fmt.Sprintf("watcher:%v", event.Type))
-							dnsRecordsTotals.With(prometheus.Labels{"namespace": service.Namespace, "status": status, "initiator": "watcher", "type": "service"}).Inc()
-							waitGroup.Done()
-
-							if err != nil {
-								log.Error().Err(err).Msgf("Processing service %v.%v failed", service.Name, service.Namespace)
-								continue
-							}
-						}
-					}
-				}
-			}
-
-			// sleep random time between 22 and 37 seconds
-			sleepTime := applyJitter(30)
-			log.Info().Msgf("Sleeping for %v seconds...", sleepTime)
-			time.Sleep(time.Duration(sleepTime) * time.Second)
-		}
-	}(waitGroup)
+	watchServices(cf, kubeClientset, factory, waitGroup, stopper)
 
 	// watch ingresses for all namespaces
+	watchIngresses(cf, kubeClientset, factory, waitGroup, stopper)
+
+	// loop services and ingresses at large intervals as safety net in case the informers miss something
 	go func(waitGroup *sync.WaitGroup) {
 		// loop indefinitely
 		for {
-			log.Info().Msg("Watching ingresses for all namespaces...")
-			timeoutSeconds := int64(300)
-			watcher, err := kubeClientset.ExtensionsV1beta1().Ingresses("").Watch(metav1.ListOptions{
-				TimeoutSeconds: &timeoutSeconds,
-			})
-			if err != nil {
-				log.Error().Err(err).Msg("WatchIngresses call failed")
-			} else {
-				// loop indefinitely, unless it errors
-				for {
-					event, ok := <-watcher.ResultChan()
-					if !ok {
-						log.Warn().Msg("Watcher for ingresses is closed")
-						break
-					}
-
-					if event.Type == watch.Added || event.Type == watch.Modified || event.Type == watch.Deleted {
-
-						ingress, ok := event.Object.(*extensionsv1beta1.Ingress)
-						if !ok {
-							log.Warn().Msg("Watcher for ingresses returns event object of incorrect type")
-							break
-						}
-
-						if event.Type == watch.Deleted {
-							waitGroup.Add(1)
-							status, err := deleteIngress(cf, kubeClientset, ingress, fmt.Sprintf("watcher:%v", event.Type))
-							dnsRecordsTotals.With(prometheus.Labels{"namespace": ingress.Namespace, "status": status, "initiator": "watcher", "type": "ingress"}).Inc()
-							waitGroup.Done()
-
-							if err != nil {
-								log.Error().Err(err).Msgf("Deleting ingress %v.%v failed", ingress.Name, ingress.Namespace)
-								continue
-							}
-						} else {
-							waitGroup.Add(1)
-							status, err := processIngress(cf, kubeClientset, ingress, fmt.Sprintf("watcher:%v", event.Type))
-							dnsRecordsTotals.With(prometheus.Labels{"namespace": ingress.Namespace, "status": status, "initiator": "watcher", "type": "ingress"}).Inc()
-							waitGroup.Done()
-
-							if err != nil {
-								log.Error().Err(err).Msgf("Processing ingress %v.%v failed", ingress.Name, ingress.Namespace)
-								continue
-							}
-						}
-					}
-				}
-			}
-
-			// sleep random time between 22 and 37 seconds
-			sleepTime := applyJitter(30)
-			log.Info().Msgf("Sleeping for %v seconds...", sleepTime)
-			time.Sleep(time.Duration(sleepTime) * time.Second)
-		}
-	}(waitGroup)
-
-	go func(waitGroup *sync.WaitGroup) {
-		// loop indefinitely
-		for {
-
 			// get services for all namespaces
 			log.Info().Msg("Listing services for all namespaces...")
 			services, err := kubeClientset.CoreV1().Services("").List(metav1.ListOptions{})
@@ -792,4 +689,123 @@ func validateHostname(hostname string) bool {
 		}
 	}
 	return true
+}
+
+func watchServices(cf *Cloudflare, kubeClientset *kubernetes.Clientset, factory informers.SharedInformerFactory, waitGroup *sync.WaitGroup, stopper chan struct{}) {
+	servicesInformer := factory.Core().V1().Services().Informer()
+
+	servicesInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			service, ok := obj.(*v1.Service)
+			if !ok {
+				log.Warn().Msg("Watcher for services returns event object of incorrect type")
+				return
+			}
+
+			waitGroup.Add(1)
+			status, err := processService(cf, kubeClientset, service, "watcher:added")
+			dnsRecordsTotals.With(prometheus.Labels{"namespace": service.Namespace, "status": status, "initiator": "watcher", "type": "service"}).Inc()
+			waitGroup.Done()
+
+			if err != nil {
+				log.Error().Err(err).Msgf("Processing service %v.%v failed", service.Name, service.Namespace)
+			}
+		},
+		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+
+			service, ok := newObj.(*v1.Service)
+			if !ok {
+				log.Warn().Msg("Watcher for services returns event object of incorrect type")
+				return
+			}
+
+			waitGroup.Add(1)
+			status, err := processService(cf, kubeClientset, service, "watcher:modified")
+			dnsRecordsTotals.With(prometheus.Labels{"namespace": service.Namespace, "status": status, "initiator": "watcher", "type": "service"}).Inc()
+			waitGroup.Done()
+
+			if err != nil {
+				log.Error().Err(err).Msgf("Processing service %v.%v failed", service.Name, service.Namespace)
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+
+			service, ok := obj.(*v1.Service)
+			if !ok {
+				log.Warn().Msg("Watcher for services returns event object of incorrect type")
+				return
+			}
+
+			waitGroup.Add(1)
+			status, err := deleteService(cf, kubeClientset, service, "watcher:deleted")
+			dnsRecordsTotals.With(prometheus.Labels{"namespace": service.Namespace, "status": status, "initiator": "watcher", "type": "service"}).Inc()
+			waitGroup.Done()
+
+			if err != nil {
+				log.Error().Err(err).Msgf("Deleting service %v.%v failed", service.Name, service.Namespace)
+			}
+		},
+	})
+
+	go servicesInformer.Run(stopper)
+}
+
+func watchIngresses(cf *Cloudflare, kubeClientset *kubernetes.Clientset, factory informers.SharedInformerFactory, waitGroup *sync.WaitGroup, stopper chan struct{}) {
+	ingressesInformer := factory.Extensions().V1beta1().Ingresses().Informer()
+
+	ingressesInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			ingress, ok := obj.(*extensionsv1beta1.Ingress)
+			if !ok {
+				log.Warn().Msg("Watcher for ingresses returns event object of incorrect type")
+				return
+			}
+
+			waitGroup.Add(1)
+			status, err := processIngress(cf, kubeClientset, ingress, "watcher:added")
+			dnsRecordsTotals.With(prometheus.Labels{"namespace": ingress.Namespace, "status": status, "initiator": "watcher", "type": "ingress"}).Inc()
+			waitGroup.Done()
+
+			if err != nil {
+				log.Error().Err(err).Msgf("Processing ingress %v.%v failed", ingress.Name, ingress.Namespace)
+			}
+		},
+		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+
+			ingress, ok := newObj.(*extensionsv1beta1.Ingress)
+			if !ok {
+				log.Warn().Msg("Watcher for ingresses returns event object of incorrect type")
+				return
+			}
+
+			waitGroup.Add(1)
+			status, err := processIngress(cf, kubeClientset, ingress, "watcher:modified")
+			dnsRecordsTotals.With(prometheus.Labels{"namespace": ingress.Namespace, "status": status, "initiator": "watcher", "type": "ingress"}).Inc()
+			waitGroup.Done()
+
+			if err != nil {
+				log.Error().Err(err).Msgf("Processing ingress %v.%v failed", ingress.Name, ingress.Namespace)
+			}
+
+		},
+		DeleteFunc: func(obj interface{}) {
+
+			ingress, ok := obj.(*extensionsv1beta1.Ingress)
+			if !ok {
+				log.Warn().Msg("Watcher for ingresses returns event object of incorrect type")
+				return
+			}
+
+			waitGroup.Add(1)
+			status, err := deleteIngress(cf, kubeClientset, ingress, "watcher:delete")
+			dnsRecordsTotals.With(prometheus.Labels{"namespace": ingress.Namespace, "status": status, "initiator": "watcher", "type": "ingress"}).Inc()
+			waitGroup.Done()
+
+			if err != nil {
+				log.Error().Err(err).Msgf("Deleting ingress %v.%v failed", ingress.Name, ingress.Namespace)
+			}
+		},
+	})
+
+	go ingressesInformer.Run(stopper)
 }
