@@ -1,9 +1,7 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"math/rand"
 	"runtime"
 	"strings"
@@ -12,12 +10,16 @@ import (
 
 	"github.com/alecthomas/kingpin"
 	foundation "github.com/estafette/estafette-foundation"
-	"github.com/rs/zerolog/log"
-
-	"github.com/ericchiang/k8s"
-	apiv1 "github.com/ericchiang/k8s/api/v1"
-	extensionsv1beta1 "github.com/ericchiang/k8s/apis/extensions/v1beta1"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/rs/zerolog/log"
+	v1 "k8s.io/api/core/v1"
+	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 )
 
 const annotationCloudflareDNS string = "estafette.io/cloudflare-dns"
@@ -86,123 +88,44 @@ func main() {
 
 	cf := New(APIAuthentication{Key: *cfAPIKey, Email: *cfAPIEmail})
 
-	// create kubernetes api client
-	client, err := k8s.NewInClusterClient()
+	// creates the in-cluster config
+	kubeClientConfig, err := rest.InClusterConfig()
 	if err != nil {
-		log.Fatal().Err(err).Msg("Creating Kubernetes api client failed")
+		log.Fatal().Err(err).Msg("Failed getting in-cluster kubernetes config")
 	}
+	// creates the kubernetes clientset
+	kubeClientset, err := kubernetes.NewForConfig(kubeClientConfig)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed creating kubernetes clientset")
+	}
+
+	// create the shared informer factory and use the client to connect to Kubernetes API
+	factory := informers.NewSharedInformerFactory(kubeClientset, 0)
+
+	// create a channel to stop the shared informers gracefully
+	stopper := make(chan struct{})
+	defer close(stopper)
+
+	// handle kubernetes API crashes
+	defer k8sruntime.HandleCrash()
 
 	foundation.InitMetrics()
 
 	gracefulShutdown, waitGroup := foundation.InitGracefulShutdownHandling()
 
 	// watch services for all namespaces
-	go func(waitGroup *sync.WaitGroup) {
-		// loop indefinitely
-		for {
-			log.Info().Msg("Watching services for all namespaces...")
-			watcher, err := client.CoreV1().WatchServices(context.Background(), k8s.AllNamespaces)
-			if err != nil {
-				log.Error().Err(err).Msg("WatchServices call failed")
-			} else {
-				// loop indefinitely, unless it errors
-				for {
-					event, service, err := watcher.Next()
-					if err != nil {
-						log.Error().Err(err).Msg("Getting next event from service watcher failed")
-						break
-					}
-
-					if *event.Type == k8s.EventAdded || *event.Type == k8s.EventModified || *event.Type == k8s.EventDeleted {
-						if *event.Type == k8s.EventDeleted {
-							waitGroup.Add(1)
-							status, err := deleteService(cf, client, service, fmt.Sprintf("watcher:%v", *event.Type))
-							dnsRecordsTotals.With(prometheus.Labels{"namespace": *service.Metadata.Namespace, "status": status, "initiator": "watcher", "type": "service"}).Inc()
-							waitGroup.Done()
-
-							if err != nil {
-								log.Error().Err(err).Msgf("Deleting service %v.%v failed", *service.Metadata.Name, *service.Metadata.Namespace)
-								continue
-							}
-						} else {
-							waitGroup.Add(1)
-							status, err := processService(cf, client, service, fmt.Sprintf("watcher:%v", *event.Type))
-							dnsRecordsTotals.With(prometheus.Labels{"namespace": *service.Metadata.Namespace, "status": status, "initiator": "watcher", "type": "service"}).Inc()
-							waitGroup.Done()
-
-							if err != nil {
-								log.Error().Err(err).Msgf("Processing service %v.%v failed", *service.Metadata.Name, *service.Metadata.Namespace)
-								continue
-							}
-						}
-					}
-				}
-			}
-
-			// sleep random time between 22 and 37 seconds
-			sleepTime := applyJitter(30)
-			log.Info().Msgf("Sleeping for %v seconds...", sleepTime)
-			time.Sleep(time.Duration(sleepTime) * time.Second)
-		}
-	}(waitGroup)
+	watchServices(cf, kubeClientset, factory, waitGroup, stopper)
 
 	// watch ingresses for all namespaces
+	watchIngresses(cf, kubeClientset, factory, waitGroup, stopper)
+
+	// loop services and ingresses at large intervals as safety net in case the informers miss something
 	go func(waitGroup *sync.WaitGroup) {
 		// loop indefinitely
 		for {
-			log.Info().Msg("Watching ingresses for all namespaces...")
-			watcher, err := client.ExtensionsV1Beta1().WatchIngresses(context.Background(), k8s.AllNamespaces)
-			if err != nil {
-				log.Error().Err(err).Msg("WatchIngresses call failed")
-			} else {
-				// loop indefinitely, unless it errors
-				for {
-					event, ingress, err := watcher.Next()
-					if err != nil {
-						log.Error().Err(err).Msg("Getting next event from ingress watcher failed")
-						break
-					}
-
-					if *event.Type == k8s.EventAdded || *event.Type == k8s.EventModified || *event.Type == k8s.EventDeleted {
-						if *event.Type == k8s.EventDeleted {
-							waitGroup.Add(1)
-							status, err := deleteIngress(cf, client, ingress, fmt.Sprintf("watcher:%v", *event.Type))
-							dnsRecordsTotals.With(prometheus.Labels{"namespace": *ingress.Metadata.Namespace, "status": status, "initiator": "watcher", "type": "ingress"}).Inc()
-							waitGroup.Done()
-
-							if err != nil {
-								log.Error().Err(err).Msgf("Deleting ingress %v.%v failed", *ingress.Metadata.Name, *ingress.Metadata.Namespace)
-								continue
-							}
-						} else {
-							waitGroup.Add(1)
-							status, err := processIngress(cf, client, ingress, fmt.Sprintf("watcher:%v", *event.Type))
-							dnsRecordsTotals.With(prometheus.Labels{"namespace": *ingress.Metadata.Namespace, "status": status, "initiator": "watcher", "type": "ingress"}).Inc()
-							waitGroup.Done()
-
-							if err != nil {
-								log.Error().Err(err).Msgf("Processing ingress %v.%v failed", *ingress.Metadata.Name, *ingress.Metadata.Namespace)
-								continue
-							}
-						}
-					}
-				}
-			}
-
-			// sleep random time between 22 and 37 seconds
-			sleepTime := applyJitter(30)
-			log.Info().Msgf("Sleeping for %v seconds...", sleepTime)
-			time.Sleep(time.Duration(sleepTime) * time.Second)
-		}
-	}(waitGroup)
-
-	go func(waitGroup *sync.WaitGroup) {
-		// loop indefinitely
-		for {
-
 			// get services for all namespaces
 			log.Info().Msg("Listing services for all namespaces...")
-			services, err := client.CoreV1().ListServices(context.Background(), k8s.AllNamespaces)
+			services, err := kubeClientset.CoreV1().Services("").List(metav1.ListOptions{})
 			if err != nil {
 				log.Error().Err(err).Msg("ListServices call failed")
 			}
@@ -211,14 +134,13 @@ func main() {
 			// loop all services
 			if services != nil && services.Items != nil {
 				for _, service := range services.Items {
-
 					waitGroup.Add(1)
-					status, err := processService(cf, client, service, "poller")
-					dnsRecordsTotals.With(prometheus.Labels{"namespace": *service.Metadata.Namespace, "status": status, "initiator": "poller", "type": "service"}).Inc()
+					status, err := processService(cf, kubeClientset, &service, "poller")
+					dnsRecordsTotals.With(prometheus.Labels{"namespace": service.Namespace, "status": status, "initiator": "poller", "type": "service"}).Inc()
 					waitGroup.Done()
 
 					if err != nil {
-						log.Error().Err(err).Msgf("Processing service %v.%v failed", *service.Metadata.Name, *service.Metadata.Namespace)
+						log.Error().Err(err).Msgf("Processing service %v.%v failed", service.Name, service.Namespace)
 						continue
 					}
 				}
@@ -226,7 +148,7 @@ func main() {
 
 			// get ingresses for all namespaces
 			log.Info().Msg("Listing ingresses for all namespaces...")
-			ingresses, err := client.ExtensionsV1Beta1().ListIngresses(context.Background(), k8s.AllNamespaces)
+			ingresses, err := kubeClientset.ExtensionsV1beta1().Ingresses("").List(metav1.ListOptions{})
 			if err != nil {
 				log.Error().Err(err).Msg("ListIngresses call failed")
 			}
@@ -237,12 +159,12 @@ func main() {
 				for _, ingress := range ingresses.Items {
 
 					waitGroup.Add(1)
-					status, err := processIngress(cf, client, ingress, "poller")
-					dnsRecordsTotals.With(prometheus.Labels{"namespace": *ingress.Metadata.Namespace, "status": status, "initiator": "poller", "type": "ingress"}).Inc()
+					status, err := processIngress(cf, kubeClientset, &ingress, "poller")
+					dnsRecordsTotals.With(prometheus.Labels{"namespace": ingress.Namespace, "status": status, "initiator": "poller", "type": "ingress"}).Inc()
 					waitGroup.Done()
 
 					if err != nil {
-						log.Error().Err(err).Msgf("Processing ingress %v.%v failed", *ingress.Metadata.Name, *ingress.Metadata.Namespace)
+						log.Error().Err(err).Msgf("Processing ingress %v.%v failed", ingress.Name, ingress.Namespace)
 						continue
 					}
 				}
@@ -265,49 +187,49 @@ func applyJitter(input int) (output int) {
 	return input - deviation + r.Intn(2*deviation)
 }
 
-func getDesiredServiceState(service *apiv1.Service) (state CloudflareState) {
+func getDesiredServiceState(service *v1.Service) (state CloudflareState) {
 
 	var ok bool
 
-	state.Enabled, ok = service.Metadata.Annotations[annotationCloudflareDNS]
+	state.Enabled, ok = service.Annotations[annotationCloudflareDNS]
 	if !ok {
 		state.Enabled = "false"
 	}
-	state.Hostnames, ok = service.Metadata.Annotations[annotationCloudflareHostnames]
+	state.Hostnames, ok = service.Annotations[annotationCloudflareHostnames]
 	if !ok {
 		state.Hostnames = ""
 	}
-	state.InternalHostnames, ok = service.Metadata.Annotations[annotationCloudflareInternalHostnames]
+	state.InternalHostnames, ok = service.Annotations[annotationCloudflareInternalHostnames]
 	if !ok {
 		state.InternalHostnames = ""
 	}
-	state.Proxy, ok = service.Metadata.Annotations[annotationCloudflareProxy]
+	state.Proxy, ok = service.Annotations[annotationCloudflareProxy]
 	if !ok {
 		state.Proxy = "true"
 	}
-	state.UseOriginRecord, ok = service.Metadata.Annotations[annotationCloudflareUseOriginRecord]
+	state.UseOriginRecord, ok = service.Annotations[annotationCloudflareUseOriginRecord]
 	if !ok {
 		state.UseOriginRecord = "false"
 	}
-	state.OriginRecordHostname, ok = service.Metadata.Annotations[annotationCloudflareOriginRecordHostname]
+	state.OriginRecordHostname, ok = service.Annotations[annotationCloudflareOriginRecordHostname]
 	if !ok {
 		state.OriginRecordHostname = ""
 	}
 
-	if *service.Spec.Type == "LoadBalancer" && len(service.Status.LoadBalancer.Ingress) > 0 {
-		state.IPAddress = *service.Status.LoadBalancer.Ingress[0].Ip
+	if service.Spec.Type == "LoadBalancer" && len(service.Status.LoadBalancer.Ingress) > 0 {
+		state.IPAddress = service.Status.LoadBalancer.Ingress[0].IP
 	}
-	if *service.Spec.ClusterIP != "" {
-		state.InternalIPAddress = *service.Spec.ClusterIP
+	if service.Spec.ClusterIP != "" {
+		state.InternalIPAddress = service.Spec.ClusterIP
 	}
 
 	return
 }
 
-func getCurrentServiceState(service *apiv1.Service) (state CloudflareState) {
+func getCurrentServiceState(service *v1.Service) (state CloudflareState) {
 
 	// get state stored in annotations if present or set to empty struct
-	cloudflareStateString, ok := service.Metadata.Annotations[annotationCloudflareState]
+	cloudflareStateString, ok := service.Annotations[annotationCloudflareState]
 	if !ok {
 		// couldn't find saved state, setting to default struct
 		state = CloudflareState{}
@@ -324,7 +246,7 @@ func getCurrentServiceState(service *apiv1.Service) (state CloudflareState) {
 	return
 }
 
-func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, initiator string, desiredState, currentState CloudflareState) (status string, err error) {
+func makeServiceChanges(cf *Cloudflare, kubeClientset *kubernetes.Clientset, service *v1.Service, initiator string, desiredState, currentState CloudflareState) (status string, err error) {
 
 	status = "failed"
 	hasChanges := false
@@ -347,11 +269,11 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 			// if use origin is enabled, create an A record for the origin
 			if desiredState.UseOriginRecord == "true" && desiredState.OriginRecordHostname != "" {
 
-				log.Info().Msgf("[%v] Service %v.%v - Upserting origin dns record %v (A) to ip address %v...", initiator, *service.Metadata.Name, *service.Metadata.Namespace, desiredState.OriginRecordHostname, desiredState.IPAddress)
+				log.Info().Msgf("[%v] Service %v.%v - Upserting origin dns record %v (A) to ip address %v...", initiator, service.Name, service.Namespace, desiredState.OriginRecordHostname, desiredState.IPAddress)
 
 				_, err := cf.UpsertDNSRecord("A", desiredState.OriginRecordHostname, desiredState.IPAddress, false)
 				if err != nil {
-					log.Error().Err(err).Msgf("[%v] Service %v.%v - Upserting origin dns record %v (A) to ip address %v failed", initiator, *service.Metadata.Name, *service.Metadata.Namespace, desiredState.OriginRecordHostname, desiredState.IPAddress)
+					log.Error().Err(err).Msgf("[%v] Service %v.%v - Upserting origin dns record %v (A) to ip address %v failed", initiator, service.Name, service.Namespace, desiredState.OriginRecordHostname, desiredState.IPAddress)
 					return status, err
 				}
 			}
@@ -362,44 +284,44 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 
 				// validate hostname, skip if invalid
 				if !validateHostname(hostname) {
-					log.Error().Err(err).Msgf("[%v] Service %v.%v - Invalid dns record %v, skipping", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
+					log.Error().Err(err).Msgf("[%v] Service %v.%v - Invalid dns record %v, skipping", initiator, service.Name, service.Namespace, hostname)
 					continue
 				}
 
 				// if use origin is enabled, create a CNAME record pointing to the origin record
 				if desiredState.UseOriginRecord == "true" && desiredState.OriginRecordHostname != "" {
 
-					log.Info().Msgf("[%v] Service %v.%v - Upserting dns record %v (CNAME) to value %v...", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, desiredState.OriginRecordHostname)
+					log.Info().Msgf("[%v] Service %v.%v - Upserting dns record %v (CNAME) to value %v...", initiator, service.Name, service.Namespace, hostname, desiredState.OriginRecordHostname)
 
 					_, err := cf.UpsertDNSRecord("CNAME", hostname, desiredState.OriginRecordHostname, desiredState.Proxy == "true")
 					if err != nil {
-						log.Error().Err(err).Msgf("[%v] Service %v.%v - Upserting dns record %v (CNAME) to value %v failed", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, desiredState.OriginRecordHostname)
+						log.Error().Err(err).Msgf("[%v] Service %v.%v - Upserting dns record %v (CNAME) to value %v failed", initiator, service.Name, service.Namespace, hostname, desiredState.OriginRecordHostname)
 						return status, err
 					}
 				} else {
 
-					log.Info().Msgf("[%v] Service %v.%v - Upserting dns record %v (A) to ip address %v...", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, desiredState.IPAddress)
+					log.Info().Msgf("[%v] Service %v.%v - Upserting dns record %v (A) to ip address %v...", initiator, service.Name, service.Namespace, hostname, desiredState.IPAddress)
 
 					_, err := cf.UpsertDNSRecord("A", hostname, desiredState.IPAddress, desiredState.Proxy == "true")
 					if err != nil {
-						log.Error().Err(err).Msgf("[%v] Service %v.%v - Upserting dns record %v (A) to ip address %v failed", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, desiredState.IPAddress)
+						log.Error().Err(err).Msgf("[%v] Service %v.%v - Upserting dns record %v (A) to ip address %v failed", initiator, service.Name, service.Namespace, hostname, desiredState.IPAddress)
 						return status, err
 					}
 				}
 
 				// if proxy is enabled, update it at Cloudflare
 				if desiredState.Proxy == "true" {
-					log.Info().Msgf("[%v] Service %v.%v - Enabling proxying for dns record %v (A)...", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
+					log.Info().Msgf("[%v] Service %v.%v - Enabling proxying for dns record %v (A)...", initiator, service.Name, service.Namespace, hostname)
 				} else {
-					log.Info().Msgf("[%v] Service %v.%v - Disabling proxying for dns record %v (A)...", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
+					log.Info().Msgf("[%v] Service %v.%v - Disabling proxying for dns record %v (A)...", initiator, service.Name, service.Namespace, hostname)
 				}
 
 				_, err := cf.UpdateProxySetting(hostname, desiredState.Proxy == "true")
 				if err != nil {
 					if desiredState.Proxy == "true" {
-						log.Error().Err(err).Msgf("[%v] Service %v.%v - Enabling proxying for dns record %v (A) failed", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
+						log.Error().Err(err).Msgf("[%v] Service %v.%v - Enabling proxying for dns record %v (A) failed", initiator, service.Name, service.Namespace, hostname)
 					} else {
-						log.Error().Err(err).Msgf("[%v] Service %v.%v - Disabling proxying for dns record %v (A) failed", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname)
+						log.Error().Err(err).Msgf("[%v] Service %v.%v - Disabling proxying for dns record %v (A) failed", initiator, service.Name, service.Namespace, hostname)
 					}
 
 					return status, err
@@ -409,11 +331,11 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 			// if use origin is disabled, remove the A record for the origin, if state still has a value for OriginRecordHostname
 			if desiredState.OriginRecordHostname != "" && (desiredState.UseOriginRecord != "true" || desiredState.OriginRecordHostname == "") {
 
-				log.Info().Msgf("[%v] Service %v.%v - Deleting origin dns record %v (A)...", initiator, *service.Metadata.Name, *service.Metadata.Namespace, desiredState.OriginRecordHostname)
+				log.Info().Msgf("[%v] Service %v.%v - Deleting origin dns record %v (A)...", initiator, service.Name, service.Namespace, desiredState.OriginRecordHostname)
 
 				_, err := cf.DeleteDNSRecord(desiredState.OriginRecordHostname)
 				if err != nil {
-					log.Error().Err(err).Msgf("[%v] Service %v.%v - Deleting origin dns record %v (A) failed", initiator, *service.Metadata.Name, *service.Metadata.Namespace, desiredState.OriginRecordHostname)
+					log.Error().Err(err).Msgf("[%v] Service %v.%v - Deleting origin dns record %v (A) failed", initiator, service.Name, service.Namespace, desiredState.OriginRecordHostname)
 					return status, err
 				}
 			}
@@ -435,11 +357,11 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 			internalHostnames := strings.Split(desiredState.InternalHostnames, ",")
 			for _, internalHostname := range internalHostnames {
 
-				log.Info().Msgf("[%v] Service %v.%v - Upserting dns record %v (A) to internal ip address %v...", initiator, *service.Metadata.Name, *service.Metadata.Namespace, internalHostname, desiredState.InternalIPAddress)
+				log.Info().Msgf("[%v] Service %v.%v - Upserting dns record %v (A) to internal ip address %v...", initiator, service.Name, service.Namespace, internalHostname, desiredState.InternalIPAddress)
 
 				_, err := cf.UpsertDNSRecord("A", internalHostname, desiredState.InternalIPAddress, false)
 				if err != nil {
-					log.Error().Err(err).Msgf("[%v] Service %v.%v - Upserting dns record %v (A) to internal ip address %v failed", initiator, *service.Metadata.Name, *service.Metadata.Namespace, internalHostname, desiredState.InternalIPAddress)
+					log.Error().Err(err).Msgf("[%v] Service %v.%v - Upserting dns record %v (A) to internal ip address %v failed", initiator, service.Name, service.Namespace, internalHostname, desiredState.InternalIPAddress)
 					return status, err
 				}
 			}
@@ -451,26 +373,26 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 		// if any state property changed make sure to update all
 		currentState = desiredState
 
-		log.Info().Msgf("[%v] Service %v.%v - Updating service because state has changed...", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
+		log.Info().Msgf("[%v] Service %v.%v - Updating service because state has changed...", initiator, service.Name, service.Namespace)
 
 		// serialize state and store it in the annotation
 		cloudflareStateByteArray, err := json.Marshal(currentState)
 		if err != nil {
-			log.Error().Err(err).Msgf("[%v] Service %v.%v - Marshalling state failed", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
+			log.Error().Err(err).Msgf("[%v] Service %v.%v - Marshalling state failed", initiator, service.Name, service.Namespace)
 			return status, err
 		}
-		service.Metadata.Annotations[annotationCloudflareState] = string(cloudflareStateByteArray)
+		service.Annotations[annotationCloudflareState] = string(cloudflareStateByteArray)
 
 		// update service, because the state annotations have changed
-		service, err = client.CoreV1().UpdateService(context.Background(), service)
+		service, err = kubeClientset.CoreV1().Services("").Update(service)
 		if err != nil {
-			log.Error().Err(err).Msgf("[%v] Service %v.%v - Updating service state has failed", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
+			log.Error().Err(err).Msgf("[%v] Service %v.%v - Updating service state has failed", initiator, service.Name, service.Namespace)
 			return status, err
 		}
 
 		status = "succeeded"
 
-		log.Info().Msgf("[%v] Service %v.%v - Service has been updated successfully...", initiator, *service.Metadata.Name, *service.Metadata.Namespace)
+		log.Info().Msgf("[%v] Service %v.%v - Service has been updated successfully...", initiator, service.Name, service.Namespace)
 
 		return status, nil
 	}
@@ -480,16 +402,16 @@ func makeServiceChanges(cf *Cloudflare, client *k8s.Client, service *apiv1.Servi
 	return status, nil
 }
 
-func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, initiator string) (status string, err error) {
+func processService(cf *Cloudflare, kubeClientset *kubernetes.Clientset, service *v1.Service, initiator string) (status string, err error) {
 
 	status = "failed"
 
-	if &service != nil && &service.Metadata != nil && &service.Metadata.Annotations != nil {
+	if service != nil {
 
 		desiredState := getDesiredServiceState(service)
 		currentState := getCurrentServiceState(service)
 
-		status, err = makeServiceChanges(cf, client, service, initiator, desiredState, currentState)
+		status, err = makeServiceChanges(cf, kubeClientset, service, initiator, desiredState, currentState)
 
 		return
 	}
@@ -499,11 +421,11 @@ func processService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, 
 	return status, nil
 }
 
-func deleteService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, initiator string) (status string, err error) {
+func deleteService(cf *Cloudflare, kubeClientset *kubernetes.Clientset, service *v1.Service, initiator string) (status string, err error) {
 
 	status = "failed"
 
-	if &service != nil && &service.Metadata != nil && &service.Metadata.Annotations != nil {
+	if service != nil {
 
 		desiredState := getDesiredServiceState(service)
 
@@ -515,10 +437,10 @@ func deleteService(cf *Cloudflare, client *k8s.Client, service *apiv1.Service, i
 		// loop all hostnames
 		hostnames := strings.Split(desiredState.Hostnames, ",")
 		for _, hostname := range hostnames {
-			log.Info().Msgf("[%v] Service %v.%v - Deleting dns record %v (%v) with ip address %v...", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, dnsRecordType, desiredState.IPAddress)
+			log.Info().Msgf("[%v] Service %v.%v - Deleting dns record %v (%v) with ip address %v...", initiator, service.Name, service.Namespace, hostname, dnsRecordType, desiredState.IPAddress)
 			_, err = cf.DeleteDNSRecordIfMatching(hostname, dnsRecordType, desiredState.IPAddress)
 			if err != nil {
-				log.Warn().Err(err).Msgf("[%v] Service %v.%v - Failed deleting dns record %v (%v) with ip address %v...", initiator, *service.Metadata.Name, *service.Metadata.Namespace, hostname, dnsRecordType, desiredState.IPAddress)
+				log.Warn().Err(err).Msgf("[%v] Service %v.%v - Failed deleting dns record %v (%v) with ip address %v...", initiator, service.Name, service.Namespace, hostname, dnsRecordType, desiredState.IPAddress)
 			} else {
 				status = "deleted"
 			}
@@ -536,29 +458,29 @@ func getDesiredIngressState(ingress *extensionsv1beta1.Ingress) (state Cloudflar
 
 	var ok bool
 
-	state.Enabled, ok = ingress.Metadata.Annotations[annotationCloudflareDNS]
+	state.Enabled, ok = ingress.Annotations[annotationCloudflareDNS]
 	if !ok {
 		state.Enabled = "false"
 	}
-	state.Hostnames, ok = ingress.Metadata.Annotations[annotationCloudflareHostnames]
+	state.Hostnames, ok = ingress.Annotations[annotationCloudflareHostnames]
 	if !ok {
 		state.Hostnames = ""
 	}
-	state.Proxy, ok = ingress.Metadata.Annotations[annotationCloudflareProxy]
+	state.Proxy, ok = ingress.Annotations[annotationCloudflareProxy]
 	if !ok {
 		state.Proxy = "true"
 	}
-	state.UseOriginRecord, ok = ingress.Metadata.Annotations[annotationCloudflareUseOriginRecord]
+	state.UseOriginRecord, ok = ingress.Annotations[annotationCloudflareUseOriginRecord]
 	if !ok {
 		state.UseOriginRecord = "false"
 	}
-	state.OriginRecordHostname, ok = ingress.Metadata.Annotations[annotationCloudflareOriginRecordHostname]
+	state.OriginRecordHostname, ok = ingress.Annotations[annotationCloudflareOriginRecordHostname]
 	if !ok {
 		state.OriginRecordHostname = ""
 	}
 
 	if len(ingress.Status.LoadBalancer.Ingress) > 0 {
-		state.IPAddress = *ingress.Status.LoadBalancer.Ingress[0].Ip
+		state.IPAddress = ingress.Status.LoadBalancer.Ingress[0].IP
 	}
 
 	return
@@ -567,7 +489,7 @@ func getDesiredIngressState(ingress *extensionsv1beta1.Ingress) (state Cloudflar
 func getCurrentIngressState(ingress *extensionsv1beta1.Ingress) (state CloudflareState) {
 
 	// get state stored in annotations if present or set to empty struct
-	cloudflareStateString, ok := ingress.Metadata.Annotations[annotationCloudflareState]
+	cloudflareStateString, ok := ingress.Annotations[annotationCloudflareState]
 	if !ok {
 		// couldn't find saved state, setting to default struct
 		state = CloudflareState{}
@@ -584,7 +506,7 @@ func getCurrentIngressState(ingress *extensionsv1beta1.Ingress) (state Cloudflar
 	return
 }
 
-func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv1beta1.Ingress, initiator string, desiredState, currentState CloudflareState) (status string, err error) {
+func makeIngressChanges(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ingress *extensionsv1beta1.Ingress, initiator string, desiredState, currentState CloudflareState) (status string, err error) {
 
 	status = "failed"
 
@@ -604,11 +526,11 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 			// if use origin is enabled, create an A record for the origin
 			if desiredState.UseOriginRecord == "true" && desiredState.OriginRecordHostname != "" {
 
-				log.Info().Msgf("[%v] Ingress %v.%v - Upserting origin dns record %v (A) to ip address %v...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, desiredState.OriginRecordHostname, desiredState.IPAddress)
+				log.Info().Msgf("[%v] Ingress %v.%v - Upserting origin dns record %v (A) to ip address %v...", initiator, ingress.Name, ingress.Namespace, desiredState.OriginRecordHostname, desiredState.IPAddress)
 
 				_, err := cf.UpsertDNSRecord("A", desiredState.OriginRecordHostname, desiredState.IPAddress, false)
 				if err != nil {
-					log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Upserting origin dns record %v (A) to ip address %v failed", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, desiredState.OriginRecordHostname, desiredState.IPAddress)
+					log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Upserting origin dns record %v (A) to ip address %v failed", initiator, ingress.Name, ingress.Namespace, desiredState.OriginRecordHostname, desiredState.IPAddress)
 					return status, err
 				}
 			}
@@ -620,37 +542,37 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 				// if use origin is enabled, create a CNAME record pointing to the origin record
 				if desiredState.UseOriginRecord == "true" && desiredState.OriginRecordHostname != "" {
 
-					log.Info().Msgf("[%v] Ingress %v.%v - Upserting dns record %v (CNAME) to value %v...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname, desiredState.OriginRecordHostname)
+					log.Info().Msgf("[%v] Ingress %v.%v - Upserting dns record %v (CNAME) to value %v...", initiator, ingress.Name, ingress.Namespace, hostname, desiredState.OriginRecordHostname)
 
 					_, err := cf.UpsertDNSRecord("CNAME", hostname, desiredState.OriginRecordHostname, desiredState.Proxy == "true")
 					if err != nil {
-						log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Upserting dns record %v (CNAME) to value %v failed", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname, desiredState.OriginRecordHostname)
+						log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Upserting dns record %v (CNAME) to value %v failed", initiator, ingress.Name, ingress.Namespace, hostname, desiredState.OriginRecordHostname)
 						return status, err
 					}
 				} else {
 
-					log.Info().Msgf("[%v] Ingress %v.%v - Upserting dns record %v (A) to ip address %v...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname, desiredState.IPAddress)
+					log.Info().Msgf("[%v] Ingress %v.%v - Upserting dns record %v (A) to ip address %v...", initiator, ingress.Name, ingress.Namespace, hostname, desiredState.IPAddress)
 
 					_, err := cf.UpsertDNSRecord("A", hostname, desiredState.IPAddress, desiredState.Proxy == "true")
 					if err != nil {
-						log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Upserting dns record %v (A) to ip address %v failed", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname, desiredState.IPAddress)
+						log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Upserting dns record %v (A) to ip address %v failed", initiator, ingress.Name, ingress.Namespace, hostname, desiredState.IPAddress)
 						return status, err
 					}
 				}
 
 				// if proxy is enabled, update it at Cloudflare
 				if desiredState.Proxy == "true" {
-					log.Info().Msgf("[%v] Ingress %v.%v - Enabling proxying for dns record %v (A)...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname)
+					log.Info().Msgf("[%v] Ingress %v.%v - Enabling proxying for dns record %v (A)...", initiator, ingress.Name, ingress.Namespace, hostname)
 				} else {
-					log.Info().Msgf("[%v] Ingress %v.%v - Disabling proxying for dns record %v (A)...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname)
+					log.Info().Msgf("[%v] Ingress %v.%v - Disabling proxying for dns record %v (A)...", initiator, ingress.Name, ingress.Namespace, hostname)
 				}
 
 				_, err := cf.UpdateProxySetting(hostname, desiredState.Proxy == "true")
 				if err != nil {
 					if desiredState.Proxy == "true" {
-						log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Enabling proxying for dns record %v (A) failed", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname)
+						log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Enabling proxying for dns record %v (A) failed", initiator, ingress.Name, ingress.Namespace, hostname)
 					} else {
-						log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Disabling proxying for dns record %v (A) failed", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname)
+						log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Disabling proxying for dns record %v (A) failed", initiator, ingress.Name, ingress.Namespace, hostname)
 					}
 
 					return status, err
@@ -660,11 +582,11 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 			// if use origin is disabled, remove the A record for the origin, if state still has a value for OriginRecordHostname
 			if desiredState.OriginRecordHostname != "" && (desiredState.UseOriginRecord != "true" || desiredState.OriginRecordHostname == "") {
 
-				log.Info().Msgf("[%v] Ingress %v.%v - Deleting origin dns record %v (A)...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, desiredState.OriginRecordHostname)
+				log.Info().Msgf("[%v] Ingress %v.%v - Deleting origin dns record %v (A)...", initiator, ingress.Name, ingress.Namespace, desiredState.OriginRecordHostname)
 
 				_, err := cf.DeleteDNSRecord(desiredState.OriginRecordHostname)
 				if err != nil {
-					log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Deleting origin dns record %v (A) failed", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, desiredState.OriginRecordHostname)
+					log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Deleting origin dns record %v (A) failed", initiator, ingress.Name, ingress.Namespace, desiredState.OriginRecordHostname)
 					return status, err
 				}
 			}
@@ -672,26 +594,26 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 			// if any state property changed make sure to update all
 			currentState = desiredState
 
-			log.Info().Msgf("[%v] Ingress %v.%v - Updating ingress because state has changed...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace)
+			log.Info().Msgf("[%v] Ingress %v.%v - Updating ingress because state has changed...", initiator, ingress.Name, ingress.Namespace)
 
 			// serialize state and store it in the annotation
 			cloudflareStateByteArray, err := json.Marshal(currentState)
 			if err != nil {
-				log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Marshalling state failed", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace)
+				log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Marshalling state failed", initiator, ingress.Name, ingress.Namespace)
 				return status, err
 			}
-			ingress.Metadata.Annotations[annotationCloudflareState] = string(cloudflareStateByteArray)
+			ingress.Annotations[annotationCloudflareState] = string(cloudflareStateByteArray)
 
 			// update ingress, because the state annotations have changed
-			_, err = client.ExtensionsV1Beta1().UpdateIngress(context.Background(), ingress)
+			_, err = kubeClientset.ExtensionsV1beta1().Ingresses("").Update(ingress)
 			if err != nil {
-				log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Updating ingress state has failed", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace)
+				log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Updating ingress state has failed", initiator, ingress.Name, ingress.Namespace)
 				return status, err
 			}
 
 			status = "succeeded"
 
-			log.Info().Msgf("[%v] Ingress %v.%v - Ingress has been updated successfully...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace)
+			log.Info().Msgf("[%v] Ingress %v.%v - Ingress has been updated successfully...", initiator, ingress.Name, ingress.Namespace)
 
 			return status, nil
 		}
@@ -702,16 +624,16 @@ func makeIngressChanges(cf *Cloudflare, client *k8s.Client, ingress *extensionsv
 	return status, nil
 }
 
-func processIngress(cf *Cloudflare, client *k8s.Client, ingress *extensionsv1beta1.Ingress, initiator string) (status string, err error) {
+func processIngress(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ingress *extensionsv1beta1.Ingress, initiator string) (status string, err error) {
 
 	status = "failed"
 
-	if &ingress != nil && &ingress.Metadata != nil && &ingress.Metadata.Annotations != nil {
+	if ingress != nil {
 
 		desiredState := getDesiredIngressState(ingress)
 		currentState := getCurrentIngressState(ingress)
 
-		status, err = makeIngressChanges(cf, client, ingress, initiator, desiredState, currentState)
+		status, err = makeIngressChanges(cf, kubeClientset, ingress, initiator, desiredState, currentState)
 
 		return
 	}
@@ -721,11 +643,11 @@ func processIngress(cf *Cloudflare, client *k8s.Client, ingress *extensionsv1bet
 	return status, nil
 }
 
-func deleteIngress(cf *Cloudflare, client *k8s.Client, ingress *extensionsv1beta1.Ingress, initiator string) (status string, err error) {
+func deleteIngress(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ingress *extensionsv1beta1.Ingress, initiator string) (status string, err error) {
 
 	status = "failed"
 
-	if &ingress != nil && &ingress.Metadata != nil && &ingress.Metadata.Annotations != nil {
+	if ingress != nil {
 
 		desiredState := getDesiredIngressState(ingress)
 
@@ -737,10 +659,10 @@ func deleteIngress(cf *Cloudflare, client *k8s.Client, ingress *extensionsv1beta
 		// loop all hostnames
 		hostnames := strings.Split(desiredState.Hostnames, ",")
 		for _, hostname := range hostnames {
-			log.Info().Msgf("[%v] Ingress %v.%v - Deleting dns record %v (%v) with ip address %v...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname, dnsRecordType, desiredState.IPAddress)
+			log.Info().Msgf("[%v] Ingress %v.%v - Deleting dns record %v (%v) with ip address %v...", initiator, ingress.Name, ingress.Namespace, hostname, dnsRecordType, desiredState.IPAddress)
 			_, err = cf.DeleteDNSRecordIfMatching(hostname, dnsRecordType, desiredState.IPAddress)
 			if err != nil {
-				log.Warn().Err(err).Msgf("[%v] Ingress %v.%v - Failed deleting dns record %v (%v) with ip address %v...", initiator, *ingress.Metadata.Name, *ingress.Metadata.Namespace, hostname, dnsRecordType, desiredState.IPAddress)
+				log.Warn().Err(err).Msgf("[%v] Ingress %v.%v - Failed deleting dns record %v (%v) with ip address %v...", initiator, ingress.Name, ingress.Namespace, hostname, dnsRecordType, desiredState.IPAddress)
 			} else {
 				status = "deleted"
 			}
@@ -767,4 +689,123 @@ func validateHostname(hostname string) bool {
 		}
 	}
 	return true
+}
+
+func watchServices(cf *Cloudflare, kubeClientset *kubernetes.Clientset, factory informers.SharedInformerFactory, waitGroup *sync.WaitGroup, stopper chan struct{}) {
+	servicesInformer := factory.Core().V1().Services().Informer()
+
+	servicesInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			service, ok := obj.(*v1.Service)
+			if !ok {
+				log.Warn().Msg("Watcher for services returns event object of incorrect type")
+				return
+			}
+
+			waitGroup.Add(1)
+			status, err := processService(cf, kubeClientset, service, "watcher:added")
+			dnsRecordsTotals.With(prometheus.Labels{"namespace": service.Namespace, "status": status, "initiator": "watcher", "type": "service"}).Inc()
+			waitGroup.Done()
+
+			if err != nil {
+				log.Error().Err(err).Msgf("Processing service %v.%v failed", service.Name, service.Namespace)
+			}
+		},
+		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+
+			service, ok := newObj.(*v1.Service)
+			if !ok {
+				log.Warn().Msg("Watcher for services returns event object of incorrect type")
+				return
+			}
+
+			waitGroup.Add(1)
+			status, err := processService(cf, kubeClientset, service, "watcher:modified")
+			dnsRecordsTotals.With(prometheus.Labels{"namespace": service.Namespace, "status": status, "initiator": "watcher", "type": "service"}).Inc()
+			waitGroup.Done()
+
+			if err != nil {
+				log.Error().Err(err).Msgf("Processing service %v.%v failed", service.Name, service.Namespace)
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+
+			service, ok := obj.(*v1.Service)
+			if !ok {
+				log.Warn().Msg("Watcher for services returns event object of incorrect type")
+				return
+			}
+
+			waitGroup.Add(1)
+			status, err := deleteService(cf, kubeClientset, service, "watcher:deleted")
+			dnsRecordsTotals.With(prometheus.Labels{"namespace": service.Namespace, "status": status, "initiator": "watcher", "type": "service"}).Inc()
+			waitGroup.Done()
+
+			if err != nil {
+				log.Error().Err(err).Msgf("Deleting service %v.%v failed", service.Name, service.Namespace)
+			}
+		},
+	})
+
+	go servicesInformer.Run(stopper)
+}
+
+func watchIngresses(cf *Cloudflare, kubeClientset *kubernetes.Clientset, factory informers.SharedInformerFactory, waitGroup *sync.WaitGroup, stopper chan struct{}) {
+	ingressesInformer := factory.Extensions().V1beta1().Ingresses().Informer()
+
+	ingressesInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			ingress, ok := obj.(*extensionsv1beta1.Ingress)
+			if !ok {
+				log.Warn().Msg("Watcher for ingresses returns event object of incorrect type")
+				return
+			}
+
+			waitGroup.Add(1)
+			status, err := processIngress(cf, kubeClientset, ingress, "watcher:added")
+			dnsRecordsTotals.With(prometheus.Labels{"namespace": ingress.Namespace, "status": status, "initiator": "watcher", "type": "ingress"}).Inc()
+			waitGroup.Done()
+
+			if err != nil {
+				log.Error().Err(err).Msgf("Processing ingress %v.%v failed", ingress.Name, ingress.Namespace)
+			}
+		},
+		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+
+			ingress, ok := newObj.(*extensionsv1beta1.Ingress)
+			if !ok {
+				log.Warn().Msg("Watcher for ingresses returns event object of incorrect type")
+				return
+			}
+
+			waitGroup.Add(1)
+			status, err := processIngress(cf, kubeClientset, ingress, "watcher:modified")
+			dnsRecordsTotals.With(prometheus.Labels{"namespace": ingress.Namespace, "status": status, "initiator": "watcher", "type": "ingress"}).Inc()
+			waitGroup.Done()
+
+			if err != nil {
+				log.Error().Err(err).Msgf("Processing ingress %v.%v failed", ingress.Name, ingress.Namespace)
+			}
+
+		},
+		DeleteFunc: func(obj interface{}) {
+
+			ingress, ok := obj.(*extensionsv1beta1.Ingress)
+			if !ok {
+				log.Warn().Msg("Watcher for ingresses returns event object of incorrect type")
+				return
+			}
+
+			waitGroup.Add(1)
+			status, err := deleteIngress(cf, kubeClientset, ingress, "watcher:delete")
+			dnsRecordsTotals.With(prometheus.Labels{"namespace": ingress.Namespace, "status": status, "initiator": "watcher", "type": "ingress"}).Inc()
+			waitGroup.Done()
+
+			if err != nil {
+				log.Error().Err(err).Msgf("Deleting ingress %v.%v failed", ingress.Name, ingress.Namespace)
+			}
+		},
+	})
+
+	go ingressesInformer.Run(stopper)
 }
