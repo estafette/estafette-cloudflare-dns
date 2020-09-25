@@ -13,7 +13,7 @@ rules:
   - list
   - watch
   - update
-- apiGroups: ["extensions"]
+- apiGroups: ["networking.k8s.io"]
   resources:
   - ingresses
   verbs:

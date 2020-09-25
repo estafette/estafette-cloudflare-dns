@@ -13,7 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	v1 "k8s.io/api/core/v1"
-	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
+	networkingv1beta1 "k8s.io/api/networking/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/informers"
@@ -148,7 +148,7 @@ func main() {
 
 			// get ingresses for all namespaces
 			log.Info().Msg("Listing ingresses for all namespaces...")
-			ingresses, err := kubeClientset.ExtensionsV1beta1().Ingresses("").List(metav1.ListOptions{})
+			ingresses, err := kubeClientset.NetworkingV1beta1().Ingresses("").List(metav1.ListOptions{})
 			if err != nil {
 				log.Error().Err(err).Msg("ListIngresses call failed")
 			}
@@ -454,7 +454,7 @@ func deleteService(cf *Cloudflare, kubeClientset *kubernetes.Clientset, service 
 	return status, nil
 }
 
-func getDesiredIngressState(ingress *extensionsv1beta1.Ingress) (state CloudflareState) {
+func getDesiredIngressState(ingress *networkingv1beta1.Ingress) (state CloudflareState) {
 
 	var ok bool
 
@@ -486,7 +486,7 @@ func getDesiredIngressState(ingress *extensionsv1beta1.Ingress) (state Cloudflar
 	return
 }
 
-func getCurrentIngressState(ingress *extensionsv1beta1.Ingress) (state CloudflareState) {
+func getCurrentIngressState(ingress *networkingv1beta1.Ingress) (state CloudflareState) {
 
 	// get state stored in annotations if present or set to empty struct
 	cloudflareStateString, ok := ingress.Annotations[annotationCloudflareState]
@@ -506,7 +506,7 @@ func getCurrentIngressState(ingress *extensionsv1beta1.Ingress) (state Cloudflar
 	return
 }
 
-func makeIngressChanges(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ingress *extensionsv1beta1.Ingress, initiator string, desiredState, currentState CloudflareState) (status string, err error) {
+func makeIngressChanges(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ingress *networkingv1beta1.Ingress, initiator string, desiredState, currentState CloudflareState) (status string, err error) {
 
 	status = "failed"
 
@@ -605,7 +605,7 @@ func makeIngressChanges(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ing
 			ingress.Annotations[annotationCloudflareState] = string(cloudflareStateByteArray)
 
 			// update ingress, because the state annotations have changed
-			_, err = kubeClientset.ExtensionsV1beta1().Ingresses("").Update(ingress)
+			_, err = kubeClientset.NetworkingV1beta1().Ingresses("").Update(ingress)
 			if err != nil {
 				log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Updating ingress state has failed", initiator, ingress.Name, ingress.Namespace)
 				return status, err
@@ -624,7 +624,7 @@ func makeIngressChanges(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ing
 	return status, nil
 }
 
-func processIngress(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ingress *extensionsv1beta1.Ingress, initiator string) (status string, err error) {
+func processIngress(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ingress *networkingv1beta1.Ingress, initiator string) (status string, err error) {
 
 	status = "failed"
 
@@ -643,7 +643,7 @@ func processIngress(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ingress
 	return status, nil
 }
 
-func deleteIngress(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ingress *extensionsv1beta1.Ingress, initiator string) (status string, err error) {
+func deleteIngress(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ingress *networkingv1beta1.Ingress, initiator string) (status string, err error) {
 
 	status = "failed"
 
@@ -751,11 +751,11 @@ func watchServices(cf *Cloudflare, kubeClientset *kubernetes.Clientset, factory 
 }
 
 func watchIngresses(cf *Cloudflare, kubeClientset *kubernetes.Clientset, factory informers.SharedInformerFactory, waitGroup *sync.WaitGroup, stopper chan struct{}) {
-	ingressesInformer := factory.Extensions().V1beta1().Ingresses().Informer()
+	ingressesInformer := factory.Networking().V1beta1().Ingresses().Informer()
 
 	ingressesInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			ingress, ok := obj.(*extensionsv1beta1.Ingress)
+			ingress, ok := obj.(*networkingv1beta1.Ingress)
 			if !ok {
 				log.Warn().Msg("Watcher for ingresses returns event object of incorrect type")
 				return
@@ -772,7 +772,7 @@ func watchIngresses(cf *Cloudflare, kubeClientset *kubernetes.Clientset, factory
 		},
 		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 
-			ingress, ok := newObj.(*extensionsv1beta1.Ingress)
+			ingress, ok := newObj.(*networkingv1beta1.Ingress)
 			if !ok {
 				log.Warn().Msg("Watcher for ingresses returns event object of incorrect type")
 				return
@@ -790,7 +790,7 @@ func watchIngresses(cf *Cloudflare, kubeClientset *kubernetes.Clientset, factory
 		},
 		DeleteFunc: func(obj interface{}) {
 
-			ingress, ok := obj.(*extensionsv1beta1.Ingress)
+			ingress, ok := obj.(*networkingv1beta1.Ingress)
 			if !ok {
 				log.Warn().Msg("Watcher for ingresses returns event object of incorrect type")
 				return
