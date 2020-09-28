@@ -605,7 +605,7 @@ func makeIngressChanges(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ing
 			ingress.Annotations[annotationCloudflareState] = string(cloudflareStateByteArray)
 
 			// update ingress, because the state annotations have changed
-			_, err = kubeClientset.NetworkingV1beta1().Ingresses("").Update(ingress)
+			_, err = kubeClientset.NetworkingV1beta1().Ingresses(ingress.Namespace).Update(ingress)
 			if err != nil {
 				log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Updating ingress state has failed", initiator, ingress.Name, ingress.Namespace)
 				return status, err
