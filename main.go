@@ -384,7 +384,7 @@ func makeServiceChanges(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ser
 		service.Annotations[annotationCloudflareState] = string(cloudflareStateByteArray)
 
 		// update service, because the state annotations have changed
-		service, err = kubeClientset.CoreV1().Services("").Update(service)
+		service, err = kubeClientset.CoreV1().Services(service.Namespace).Update(service)
 		if err != nil {
 			log.Error().Err(err).Msgf("[%v] Service %v.%v - Updating service state has failed", initiator, service.Name, service.Namespace)
 			return status, err
