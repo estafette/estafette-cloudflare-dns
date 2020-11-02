@@ -77,6 +77,10 @@ stages:
       secret:
         cloudflareApiEmail: bot@estafette.io
         cloudflareApiKey: abc
+      imagePullSecret:
+        registryURL: https://index.docker.io/v1/
+        username: estafette.secret(UxxjlP0dfzYMN0B-.aAta8tS2pRYHGdqqfdPBibo8WGzlP9vV8A==.ZRFP9tex-REJAGLZygmunMetFf7EMY-5t6VHX2dcbYPX7odnnB4HlRAQgMq9-_-wF6o6u830OHZIfiozlw==)
+        password: estafette.secret(p28YAdrkMJy1gpCC.xv_b7BG-iFpN6Hm644IGdR8tK9EyTVITbG-M2edtzSB1thaaYe8TDupWWneA3Q==.zfjg0jW67V8S6WCSx4RWcEs8PNJVTXEkQWCRxfc59faD9cAyTvqrCpIR9J7CEtMWIg85DjqXU7eA9V9-8Q==)
 
   clone-charts-repo:
     image: extensions/git-clone:dev
