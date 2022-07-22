@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"math/rand"
 	"runtime"
@@ -13,7 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	v1 "k8s.io/api/core/v1"
-	networkingv1beta1 "k8s.io/api/networking/v1beta1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/informers"
@@ -83,6 +84,8 @@ func main() {
 	// init log format from envvar ESTAFETTE_LOG_FORMAT
 	foundation.InitLoggingFromEnv(foundation.NewApplicationInfo(appgroup, app, version, branch, revision, buildDate))
 
+	ctx := context.Background()
+
 	// init /liveness endpoint
 	foundation.InitLiveness()
 
@@ -114,10 +117,10 @@ func main() {
 	gracefulShutdown, waitGroup := foundation.InitGracefulShutdownHandling()
 
 	// watch services for all namespaces
-	watchServices(cf, kubeClientset, factory, waitGroup, stopper)
+	watchServices(ctx, cf, kubeClientset, factory, waitGroup, stopper)
 
 	// watch ingresses for all namespaces
-	watchIngresses(cf, kubeClientset, factory, waitGroup, stopper)
+	watchIngresses(ctx, cf, kubeClientset, factory, waitGroup, stopper)
 
 	// loop services and ingresses at large intervals as safety net in case the informers miss something
 	go func(waitGroup *sync.WaitGroup) {
@@ -125,7 +128,7 @@ func main() {
 		for {
 			// get services for all namespaces
 			log.Info().Msg("Listing services for all namespaces...")
-			services, err := kubeClientset.CoreV1().Services("").List(metav1.ListOptions{})
+			services, err := kubeClientset.CoreV1().Services("").List(ctx, metav1.ListOptions{})
 			if err != nil {
 				log.Error().Err(err).Msg("ListServices call failed")
 			}
@@ -135,7 +138,7 @@ func main() {
 			if services != nil && services.Items != nil {
 				for _, service := range services.Items {
 					waitGroup.Add(1)
-					status, err := processService(cf, kubeClientset, &service, "poller")
+					status, err := processService(ctx, cf, kubeClientset, &service, "poller")
 					dnsRecordsTotals.With(prometheus.Labels{"namespace": service.Namespace, "status": status, "initiator": "poller", "type": "service"}).Inc()
 					waitGroup.Done()
 
@@ -148,7 +151,7 @@ func main() {
 
 			// get ingresses for all namespaces
 			log.Info().Msg("Listing ingresses for all namespaces...")
-			ingresses, err := kubeClientset.NetworkingV1beta1().Ingresses("").List(metav1.ListOptions{})
+			ingresses, err := kubeClientset.NetworkingV1().Ingresses("").List(ctx, metav1.ListOptions{})
 			if err != nil {
 				log.Error().Err(err).Msg("ListIngresses call failed")
 			}
@@ -159,7 +162,7 @@ func main() {
 				for _, ingress := range ingresses.Items {
 
 					waitGroup.Add(1)
-					status, err := processIngress(cf, kubeClientset, &ingress, "poller")
+					status, err := processIngress(ctx, cf, kubeClientset, &ingress, "poller")
 					dnsRecordsTotals.With(prometheus.Labels{"namespace": ingress.Namespace, "status": status, "initiator": "poller", "type": "ingress"}).Inc()
 					waitGroup.Done()
 
@@ -246,7 +249,7 @@ func getCurrentServiceState(service *v1.Service) (state CloudflareState) {
 	return
 }
 
-func makeServiceChanges(cf *Cloudflare, kubeClientset *kubernetes.Clientset, service *v1.Service, initiator string, desiredState, currentState CloudflareState) (status string, err error) {
+func makeServiceChanges(ctx context.Context, cf *Cloudflare, kubeClientset *kubernetes.Clientset, service *v1.Service, initiator string, desiredState, currentState CloudflareState) (status string, err error) {
 
 	status = "failed"
 	hasChanges := false
@@ -384,7 +387,7 @@ func makeServiceChanges(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ser
 		service.Annotations[annotationCloudflareState] = string(cloudflareStateByteArray)
 
 		// update service, because the state annotations have changed
-		service, err = kubeClientset.CoreV1().Services(service.Namespace).Update(service)
+		service, err = kubeClientset.CoreV1().Services(service.Namespace).Update(ctx, service, metav1.UpdateOptions{})
 		if err != nil {
 			log.Error().Err(err).Msgf("[%v] Service %v.%v - Updating service state has failed", initiator, service.Name, service.Namespace)
 			return status, err
@@ -402,7 +405,7 @@ func makeServiceChanges(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ser
 	return status, nil
 }
 
-func processService(cf *Cloudflare, kubeClientset *kubernetes.Clientset, service *v1.Service, initiator string) (status string, err error) {
+func processService(ctx context.Context, cf *Cloudflare, kubeClientset *kubernetes.Clientset, service *v1.Service, initiator string) (status string, err error) {
 
 	status = "failed"
 
@@ -411,7 +414,7 @@ func processService(cf *Cloudflare, kubeClientset *kubernetes.Clientset, service
 		desiredState := getDesiredServiceState(service)
 		currentState := getCurrentServiceState(service)
 
-		status, err = makeServiceChanges(cf, kubeClientset, service, initiator, desiredState, currentState)
+		status, err = makeServiceChanges(ctx, cf, kubeClientset, service, initiator, desiredState, currentState)
 
 		return
 	}
@@ -454,7 +457,7 @@ func deleteService(cf *Cloudflare, kubeClientset *kubernetes.Clientset, service 
 	return status, nil
 }
 
-func getDesiredIngressState(ingress *networkingv1beta1.Ingress) (state CloudflareState) {
+func getDesiredIngressState(ingress *networkingv1.Ingress) (state CloudflareState) {
 
 	var ok bool
 
@@ -486,7 +489,7 @@ func getDesiredIngressState(ingress *networkingv1beta1.Ingress) (state Cloudflar
 	return
 }
 
-func getCurrentIngressState(ingress *networkingv1beta1.Ingress) (state CloudflareState) {
+func getCurrentIngressState(ingress *networkingv1.Ingress) (state CloudflareState) {
 
 	// get state stored in annotations if present or set to empty struct
 	cloudflareStateString, ok := ingress.Annotations[annotationCloudflareState]
@@ -506,7 +509,7 @@ func getCurrentIngressState(ingress *networkingv1beta1.Ingress) (state Cloudflar
 	return
 }
 
-func makeIngressChanges(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ingress *networkingv1beta1.Ingress, initiator string, desiredState, currentState CloudflareState) (status string, err error) {
+func makeIngressChanges(ctx context.Context, cf *Cloudflare, kubeClientset *kubernetes.Clientset, ingress *networkingv1.Ingress, initiator string, desiredState, currentState CloudflareState) (status string, err error) {
 
 	status = "failed"
 
@@ -605,7 +608,7 @@ func makeIngressChanges(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ing
 			ingress.Annotations[annotationCloudflareState] = string(cloudflareStateByteArray)
 
 			// update ingress, because the state annotations have changed
-			_, err = kubeClientset.NetworkingV1beta1().Ingresses(ingress.Namespace).Update(ingress)
+			_, err = kubeClientset.NetworkingV1().Ingresses(ingress.Namespace).Update(ctx, ingress, metav1.UpdateOptions{})
 			if err != nil {
 				log.Error().Err(err).Msgf("[%v] Ingress %v.%v - Updating ingress state has failed", initiator, ingress.Name, ingress.Namespace)
 				return status, err
@@ -624,7 +627,7 @@ func makeIngressChanges(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ing
 	return status, nil
 }
 
-func processIngress(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ingress *networkingv1beta1.Ingress, initiator string) (status string, err error) {
+func processIngress(ctx context.Context, cf *Cloudflare, kubeClientset *kubernetes.Clientset, ingress *networkingv1.Ingress, initiator string) (status string, err error) {
 
 	status = "failed"
 
@@ -633,7 +636,7 @@ func processIngress(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ingress
 		desiredState := getDesiredIngressState(ingress)
 		currentState := getCurrentIngressState(ingress)
 
-		status, err = makeIngressChanges(cf, kubeClientset, ingress, initiator, desiredState, currentState)
+		status, err = makeIngressChanges(ctx, cf, kubeClientset, ingress, initiator, desiredState, currentState)
 
 		return
 	}
@@ -643,7 +646,7 @@ func processIngress(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ingress
 	return status, nil
 }
 
-func deleteIngress(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ingress *networkingv1beta1.Ingress, initiator string) (status string, err error) {
+func deleteIngress(cf *Cloudflare, kubeClientset *kubernetes.Clientset, ingress *networkingv1.Ingress, initiator string) (status string, err error) {
 
 	status = "failed"
 
@@ -691,7 +694,7 @@ func validateHostname(hostname string) bool {
 	return true
 }
 
-func watchServices(cf *Cloudflare, kubeClientset *kubernetes.Clientset, factory informers.SharedInformerFactory, waitGroup *sync.WaitGroup, stopper chan struct{}) {
+func watchServices(ctx context.Context, cf *Cloudflare, kubeClientset *kubernetes.Clientset, factory informers.SharedInformerFactory, waitGroup *sync.WaitGroup, stopper chan struct{}) {
 	servicesInformer := factory.Core().V1().Services().Informer()
 
 	servicesInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -703,7 +706,7 @@ func watchServices(cf *Cloudflare, kubeClientset *kubernetes.Clientset, factory 
 			}
 
 			waitGroup.Add(1)
-			status, err := processService(cf, kubeClientset, service, "watcher:added")
+			status, err := processService(ctx, cf, kubeClientset, service, "watcher:added")
 			dnsRecordsTotals.With(prometheus.Labels{"namespace": service.Namespace, "status": status, "initiator": "watcher", "type": "service"}).Inc()
 			waitGroup.Done()
 
@@ -720,7 +723,7 @@ func watchServices(cf *Cloudflare, kubeClientset *kubernetes.Clientset, factory 
 			}
 
 			waitGroup.Add(1)
-			status, err := processService(cf, kubeClientset, service, "watcher:modified")
+			status, err := processService(ctx, cf, kubeClientset, service, "watcher:modified")
 			dnsRecordsTotals.With(prometheus.Labels{"namespace": service.Namespace, "status": status, "initiator": "watcher", "type": "service"}).Inc()
 			waitGroup.Done()
 
@@ -750,19 +753,19 @@ func watchServices(cf *Cloudflare, kubeClientset *kubernetes.Clientset, factory 
 	go servicesInformer.Run(stopper)
 }
 
-func watchIngresses(cf *Cloudflare, kubeClientset *kubernetes.Clientset, factory informers.SharedInformerFactory, waitGroup *sync.WaitGroup, stopper chan struct{}) {
-	ingressesInformer := factory.Networking().V1beta1().Ingresses().Informer()
+func watchIngresses(ctx context.Context, cf *Cloudflare, kubeClientset *kubernetes.Clientset, factory informers.SharedInformerFactory, waitGroup *sync.WaitGroup, stopper chan struct{}) {
+	ingressesInformer := factory.Networking().V1().Ingresses().Informer()
 
 	ingressesInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			ingress, ok := obj.(*networkingv1beta1.Ingress)
+			ingress, ok := obj.(*networkingv1.Ingress)
 			if !ok {
 				log.Warn().Msg("Watcher for ingresses returns event object of incorrect type")
 				return
 			}
 
 			waitGroup.Add(1)
-			status, err := processIngress(cf, kubeClientset, ingress, "watcher:added")
+			status, err := processIngress(ctx, cf, kubeClientset, ingress, "watcher:added")
 			dnsRecordsTotals.With(prometheus.Labels{"namespace": ingress.Namespace, "status": status, "initiator": "watcher", "type": "ingress"}).Inc()
 			waitGroup.Done()
 
@@ -772,14 +775,14 @@ func watchIngresses(cf *Cloudflare, kubeClientset *kubernetes.Clientset, factory
 		},
 		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 
-			ingress, ok := newObj.(*networkingv1beta1.Ingress)
+			ingress, ok := newObj.(*networkingv1.Ingress)
 			if !ok {
 				log.Warn().Msg("Watcher for ingresses returns event object of incorrect type")
 				return
 			}
 
 			waitGroup.Add(1)
-			status, err := processIngress(cf, kubeClientset, ingress, "watcher:modified")
+			status, err := processIngress(ctx, cf, kubeClientset, ingress, "watcher:modified")
 			dnsRecordsTotals.With(prometheus.Labels{"namespace": ingress.Namespace, "status": status, "initiator": "watcher", "type": "ingress"}).Inc()
 			waitGroup.Done()
 
@@ -790,7 +793,7 @@ func watchIngresses(cf *Cloudflare, kubeClientset *kubernetes.Clientset, factory
 		},
 		DeleteFunc: func(obj interface{}) {
 
-			ingress, ok := obj.(*networkingv1beta1.Ingress)
+			ingress, ok := obj.(*networkingv1.Ingress)
 			if !ok {
 				log.Warn().Msg("Watcher for ingresses returns event object of incorrect type")
 				return
