@@ -57,50 +57,32 @@ func (cf *Cloudflare) GetZoneByDNSName(dnsName string) (r Zone, err error) {
 	// verify dnsName has enough parts
 	if len(dnsNameParts) < 2 {
 		err = errors.New("cloudflare: dnsName has too few parts, should at least have a tld and domain name")
-		return
-	}
-
-	// start taking parts from the end of dnsName and see if cloudflare has a zone for them
-	numberOfZoneItems := 2
-	zoneNameParts, err := getLastItemsFromSlice(dnsNameParts, numberOfZoneItems)
-	if err != nil {
 		return r, err
-	}
-
-	zoneName := strings.Join(zoneNameParts, ".")
-	zonesResult, err := cf.getZonesByName(zoneName)
-	if err != nil {
-		return r, err
-	}
-
-	// if matching zones results fit in a single page get the fully matching zone from the results, otherwise narrow down the search
-	if (zonesResult.ResultInfo.Count > 0) && (zonesResult.ResultInfo.Count <= zonesResult.ResultInfo.PerPage) {
-		r, err = getMatchingZoneFromZones(zonesResult.Zones, zoneName)
-		return
 	}
 
 	// if too many zones or none exist for last 2 parts of the dns name, we have to narrow down the search by specifying a more detailed name
-	for ((zonesResult.ResultInfo.TotalCount == 0) || (zonesResult.ResultInfo.TotalCount > zonesResult.ResultInfo.PerPage)) && (numberOfZoneItems < len(dnsNameParts)) {
-		numberOfZoneItems++
-		zoneNameParts, err = getLastItemsFromSlice(dnsNameParts, numberOfZoneItems)
+	numberOfZoneItems := len(dnsNameParts)
+	for numberOfZoneItems > 1 {
+		zoneNameParts, err := getLastItemsFromSlice(dnsNameParts, numberOfZoneItems)
 		if err != nil {
-			return
+			return r, err
 		}
 
-		zoneName = strings.Join(zoneNameParts, ".")
-		zonesResult, err = cf.getZonesByName(zoneName)
+		zoneName := strings.Join(zoneNameParts, ".")
+		zonesResult, err := cf.getZonesByName(zoneName)
 		if err != nil {
-			return
+			return r, err
 		}
 
 		if (zonesResult.ResultInfo.Count > 0) && (zonesResult.ResultInfo.Count <= zonesResult.ResultInfo.PerPage) {
-			r, err = getMatchingZoneFromZones(zonesResult.Zones, zoneName)
-			return
+			r, err := getMatchingZoneFromZones(zonesResult.Zones, zoneName)
+			return r, err
 		}
+		numberOfZoneItems--
 	}
 
 	err = errors.New("cloudflare: no matching zone has been found")
-	return
+	return r, err
 }
 
 func (cf *Cloudflare) getDNSRecordsByZoneAndName(zone Zone, dnsRecordName string) (r dNSRecordsResult, err error) {
