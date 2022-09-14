@@ -653,6 +653,22 @@ func TestDeleteDNSRecord(t *testing.T) {
 		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
 
 		fakeRESTClient := new(fakeRESTClient)
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=www.example.com", authentication).Return([]byte(`
+		{
+
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": [
+				],
+				"result_info": {
+					"page": 1,
+					"per_page": 20,
+					"count": 0,
+					"total_count": 0
+				}
+    }
+		`), nil)
 		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=example.com", authentication).Return([]byte(`
 		{
 			"success": true,
@@ -749,6 +765,22 @@ func TestDeleteDNSRecord(t *testing.T) {
 		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
 
 		fakeRESTClient := new(fakeRESTClient)
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=www.example.com", authentication).Return([]byte(`
+		{
+
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": [
+				],
+				"result_info": {
+					"page": 1,
+					"per_page": 20,
+					"count": 0,
+					"total_count": 0
+				}
+    }
+		`), nil)
 		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=example.com", authentication).Return([]byte(`
 		{
 			"success": true,
@@ -868,6 +900,22 @@ func TestDeleteDNSRecord(t *testing.T) {
 		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
 
 		fakeRESTClient := new(fakeRESTClient)
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=www.example.com", authentication).Return([]byte(`
+		{
+
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": [
+				],
+				"result_info": {
+					"page": 1,
+					"per_page": 20,
+					"count": 0,
+					"total_count": 0
+				}
+    }
+		`), nil)
 		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=example.com", authentication).Return([]byte(`
 		{
 			"success": true,
@@ -1031,6 +1079,22 @@ func TestUpdateDNSRecord(t *testing.T) {
 		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
 
 		fakeRESTClient := new(fakeRESTClient)
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=www.example.com", authentication).Return([]byte(`
+		{
+
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": [
+				],
+				"result_info": {
+					"page": 1,
+					"per_page": 20,
+					"count": 0,
+					"total_count": 0
+				}
+    }
+		`), nil)
 		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=example.com", authentication).Return([]byte(`
 		{
 			"success": true,
@@ -1129,6 +1193,22 @@ func TestUpdateDNSRecord(t *testing.T) {
 		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
 
 		fakeRESTClient := new(fakeRESTClient)
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=www.example.com", authentication).Return([]byte(`
+		{
+
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": [
+				],
+				"result_info": {
+					"page": 1,
+					"per_page": 20,
+					"count": 0,
+					"total_count": 0
+				}
+    }
+		`), nil)
 		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=example.com", authentication).Return([]byte(`
 		{
 			"success": true,
@@ -1243,6 +1323,22 @@ func TestUpdateDNSRecord(t *testing.T) {
 		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
 
 		fakeRESTClient := new(fakeRESTClient)
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=www.example.com", authentication).Return([]byte(`
+		{
+
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": [
+				],
+				"result_info": {
+					"page": 1,
+					"per_page": 20,
+					"count": 0,
+					"total_count": 0
+				}
+    }
+		`), nil)
 		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=example.com", authentication).Return([]byte(`
 		{
 			"success": true,
@@ -1384,6 +1480,22 @@ func TestUpdateDNSRecord(t *testing.T) {
 		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
 
 		fakeRESTClient := new(fakeRESTClient)
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=www.example.com", authentication).Return([]byte(`
+		{
+
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": [
+				],
+				"result_info": {
+					"page": 1,
+					"per_page": 20,
+					"count": 0,
+					"total_count": 0
+				}
+    }
+		`), nil)
 		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=example.com", authentication).Return([]byte(`
 		{
 			"success": true,
@@ -1579,6 +1691,21 @@ func TestUpsertDNSRecord(t *testing.T) {
 		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
 
 		fakeRESTClient := new(fakeRESTClient)
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=www.example.com", authentication).Return([]byte(`
+		{
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": [
+				],
+				"result_info": {
+					"page": 1,
+					"per_page": 20,
+					"count": 0,
+					"total_count": 0
+				}
+    }
+		`), nil)
 		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=example.com", authentication).Return([]byte(`
 		{
 			"success": true,
@@ -1689,6 +1816,21 @@ func TestUpsertDNSRecord(t *testing.T) {
 		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
 
 		fakeRESTClient := new(fakeRESTClient)
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=www.example.com", authentication).Return([]byte(`
+		{
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": [
+				],
+				"result_info": {
+					"page": 1,
+					"per_page": 20,
+					"count": 0,
+					"total_count": 0
+				}
+    }
+		`), nil)
 		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=example.com", authentication).Return([]byte(`
 		{
 			"success": true,
@@ -1813,6 +1955,21 @@ func TestUpsertDNSRecord(t *testing.T) {
 		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
 
 		fakeRESTClient := new(fakeRESTClient)
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=www.example.com", authentication).Return([]byte(`
+		{
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": [
+				],
+				"result_info": {
+					"page": 1,
+					"per_page": 20,
+					"count": 0,
+					"total_count": 0
+				}
+    }
+		`), nil)
 		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=example.com", authentication).Return([]byte(`
 		{
 			"success": true,
@@ -1964,6 +2121,21 @@ func TestUpsertDNSRecord(t *testing.T) {
 		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
 
 		fakeRESTClient := new(fakeRESTClient)
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=www.example.com", authentication).Return([]byte(`
+		{
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": [
+				],
+				"result_info": {
+					"page": 1,
+					"per_page": 20,
+					"count": 0,
+					"total_count": 0
+				}
+    }
+		`), nil)
 		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=example.com", authentication).Return([]byte(`
 		{
 			"success": true,
@@ -2105,6 +2277,21 @@ func TestUpsertDNSRecord(t *testing.T) {
 		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
 
 		fakeRESTClient := new(fakeRESTClient)
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=www.example.com", authentication).Return([]byte(`
+		{
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": [
+				],
+				"result_info": {
+					"page": 1,
+					"per_page": 20,
+					"count": 0,
+					"total_count": 0
+				}
+    }
+		`), nil)
 		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=example.com", authentication).Return([]byte(`
 		{
 			"success": true,
@@ -2298,6 +2485,21 @@ func TestUpdateProxySetting(t *testing.T) {
 		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
 
 		fakeRESTClient := new(fakeRESTClient)
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=www.example.com", authentication).Return([]byte(`
+		{
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": [
+				],
+				"result_info": {
+					"page": 1,
+					"per_page": 20,
+					"count": 0,
+					"total_count": 0
+				}
+    }
+		`), nil)
 		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=example.com", authentication).Return([]byte(`
 		{
 			"success": true,
@@ -2395,6 +2597,21 @@ func TestUpdateProxySetting(t *testing.T) {
 		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
 
 		fakeRESTClient := new(fakeRESTClient)
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=www.example.com", authentication).Return([]byte(`
+		{
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": [
+				],
+				"result_info": {
+					"page": 1,
+					"per_page": 20,
+					"count": 0,
+					"total_count": 0
+				}
+    }
+		`), nil)
 		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=example.com", authentication).Return([]byte(`
 		{
 		"success": true,
@@ -2535,6 +2752,21 @@ func TestUpdateProxySetting(t *testing.T) {
 		authentication := APIAuthentication{Key: "r2kjepva04hijzv18u3e9ntphs79kctdxxj5w", Email: "name@server.com"}
 
 		fakeRESTClient := new(fakeRESTClient)
+		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=www.example.com", authentication).Return([]byte(`
+		{
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": [
+				],
+				"result_info": {
+					"page": 1,
+					"per_page": 20,
+					"count": 0,
+					"total_count": 0
+				}
+    }
+		`), nil)
 		fakeRESTClient.On("Get", "https://api.cloudflare.com/client/v4/zones/?name=example.com", authentication).Return([]byte(`
 		{
 		"success": true,
