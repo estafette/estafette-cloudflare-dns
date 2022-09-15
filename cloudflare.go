@@ -56,7 +56,7 @@ func (cf *Cloudflare) GetZoneByDNSName(dnsName string) (r Zone, err error) {
 
 	// verify dnsName has enough parts
 	if len(dnsNameParts) < 2 {
-		err = errors.New("cloudflare: dnsName has too few parts, should at least have a tld and domain name")
+		err = errors.New("cloudflare: dnsName:" + dnsName + "has too few parts, should at least have a tld and domain name")
 		return r, err
 	}
 
