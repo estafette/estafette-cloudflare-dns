@@ -338,7 +338,7 @@ func (cf *Cloudflare) UpsertDNSRecord(dnsRecordType, dnsRecordName, dnsRecordCon
 		return r, err
 	}
 
-	log.Debug().Msgf("Retrieved zone for %v: %v", dnsRecordName, zone.ID)
+	log.Debug().Msgf("Retrieved zone for %v name: %v, id: %v", dnsRecordName, zone.Name, zone.ID)
 
 	// get dns record
 	dnsRecordsResult, err := cf.getDNSRecordsByZoneAndName(zone, dnsRecordName)
